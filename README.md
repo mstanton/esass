@@ -41,7 +41,7 @@ Skills aren't manually programmed—they **emerge** from observation:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      ESASS Meta-Cognitive Layer                      │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -109,7 +109,7 @@ Captures execution context across 6 probe types:
 Transforms observations into structured, queryable records with 5 retention levels:
 
 | Level | Name | Description | Retention |
-|-------|------|-------------|-----------|
+| :--- | :--- | :--- | :--- |
 | L0 | TRACE | Every token, every branch | 24 hours |
 | L1 | DEBUG | Reasoning steps, tool calls | 7 days |
 | L2 | INFO | Significant decisions, outcomes | 90 days |
@@ -129,11 +129,12 @@ Identifies recurring structures across 4 dimensions:
 
 Transforms patterns into skills through:
 
-```
+```text
 Pattern Clustering → Template Generation → Validation → Human Review → New Skill
 ```
 
 A pattern becomes a skill candidate when it meets criteria:
+
 - Support ≥10 instances
 - Confidence ≥0.8
 - Stability ≥7 days
@@ -159,7 +160,7 @@ Automatically generates and maintains:
 
 ## The Learning Loop
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                   CONTINUOUS LEARNING LOOP                       │
 ├─────────────────────────────────────────────────────────────────┤
@@ -188,11 +189,13 @@ Automatically generates and maintains:
 **Current State**: Early development - specification complete, implementation in progress
 
 **Completed**:
+
 - Comprehensive system specification (1271 lines)
 - Architecture documentation
 - Initial implementation: monitoring/trigger logic (sensors.py)
 
 **In Progress**:
+
 - Logging infrastructure
 - Pattern recognition implementations
 - Storage layer design
@@ -293,7 +296,7 @@ config = EvolutionConfig(
 ### Performance Targets
 
 | Metric | Target |
-|--------|--------|
+| :--- | :--- |
 | Observation latency | <10ms |
 | Query latency (simple) | <100ms |
 | Query latency (complex) | <1s |

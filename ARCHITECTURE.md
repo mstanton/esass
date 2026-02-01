@@ -11,7 +11,7 @@ The Skill Evolution System provides meta-learning capabilities for ESASS, enabli
 
 ## Architecture
 
-```
+```text
                                     ┌─────────────────────────────────────────────────────────┐
                                     │              SKILL EVOLUTION SYSTEM                     │
                                     └─────────────────────────────────────────────────────────┘
@@ -82,13 +82,13 @@ The Skill Evolution System provides meta-learning capabilities for ESASS, enabli
 
 ### 1. Similarity Computation
 
-```
+```text
 Active Skills → Embedding → 7D Similarity Matrix → Skill Clusters
 ```
 
 ### 2. Behavior Chain Discovery
 
-```
+```text
 Usage Experiences → Sequence Mining → Behavior Chains → Chain Optimization
                                             │
                                             ▼
@@ -102,7 +102,7 @@ Usage Experiences → Sequence Mining → Behavior Chains → Chain Optimization
 
 ### 3. State Space Evolution
 
-```
+```text
 Skills + Usage + Similarity → State Space Nodes → Evolution Trajectories
                                      │
                                      ▼
@@ -116,7 +116,7 @@ Skills + Usage + Similarity → State Space Nodes → Evolution Trajectories
 
 ### 4. Experience-Based Emergence
 
-```
+```text
 Usage Experiences → Pattern Mining → Experience Patterns → Emergent Capabilities
                           │                                        │
                           ▼                                        ▼
@@ -129,7 +129,7 @@ Usage Experiences → Pattern Mining → Experience Patterns → Emergent Capabi
 
 ## Module Structure
 
-```
+```text
 esass_dagster/evolution/
 ├── __init__.py          # Module exports
 ├── models.py            # Data models (40+ types)
@@ -144,7 +144,7 @@ esass_dagster/evolution/
 ### Models (models.py)
 
 | Category | Types |
-|----------|-------|
+| :--- | :--- |
 | **Enums** | EvolutionStrategy, SimilarityDimension, UnificationMethod, ChainOptimizationType, SkillLifecycleState |
 | **Similarity** | SkillSimilarityScore, SimilarityWeights, SkillCluster, SimilarityMatrix |
 | **Chains** | BehaviorChainNode, BehaviorChainEdge, BehaviorChain, ChainOptimizationResult |
@@ -157,7 +157,7 @@ esass_dagster/evolution/
 ### Assets (assets.py)
 
 | Asset | Purpose |
-|-------|---------|
+| :--- | :--- |
 | `skill_similarity_matrix` | Compute 7D pairwise similarity |
 | `skill_clusters` | Group similar skills |
 | `behavior_chains` | Detect usage sequences |
@@ -173,7 +173,7 @@ esass_dagster/evolution/
 ### Jobs (jobs.py)
 
 | Job | Assets |
-|-----|--------|
+| :--- | :--- |
 | `skill_similarity_job` | similarity_matrix, clusters |
 | `behavior_chain_job` | chains, optimized_chains |
 | `state_space_job` | state_space, trajectories |
@@ -184,7 +184,7 @@ esass_dagster/evolution/
 ### Sensors (sensors.py)
 
 | Sensor | Trigger Condition | Interval |
-|--------|-------------------|----------|
+| :--- | :--- | :--- |
 | `skill_similarity_sensor` | New/updated skills, 24h stale | 1h |
 | `chain_optimization_sensor` | Experience accumulation | 2h |
 | `unification_opportunity_sensor` | High-similarity clusters | 4h |
@@ -197,7 +197,7 @@ esass_dagster/evolution/
 ### Resources (resources.py)
 
 | Resource | Purpose |
-|----------|---------|
+| :--- | :--- |
 | `EvolutionConfigResource` | Pipeline configuration |
 | `ExperienceStoreResource` | Usage experience storage |
 | `ChainStoreResource` | Behavior chain storage |
@@ -246,7 +246,7 @@ config = EvolutionConfigResource(
 
 The evolution system completes the meta-cognitive loop:
 
-```
+```text
 Observations → Patterns → Skills → Usage Experiences → Evolution → Improved Skills
       ↑                                                                    │
       └────────────────────────────────────────────────────────────────────┘
