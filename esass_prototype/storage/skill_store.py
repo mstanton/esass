@@ -1,207 +1,160 @@
 """
-Skill storage using JSON files.
+Skill storage using JSON format.
 
-Provides storage and retrieval for skill manifests.
+Stores generated skill manifests with metadata and validation status.
 """
 
 from pathlib import Path
 from typing import List, Optional
 import json
 
-from esass_prototype.models import SkillManifest
+from ..models import SkillManifest
+from ..config import get_data_dir, ESASSConfig
 
 
 class SkillStore:
-    """
-    Storage for skill manifests using JSON files.
+    """Manages skill manifest storage in JSON files"""
 
-    Each skill is stored in its own file for easy inspection.
-    """
-
-    def __init__(self, data_dir: Path):
-        """
-        Initialize skill store.
-
-        Args:
-            data_dir: Base directory for data storage
-        """
-        self.data_dir = Path(data_dir)
+    def __init__(self, config: Optional[ESASSConfig] = None):
+        # Handle both Path and ESASSConfig
+        if isinstance(config, Path):
+            self.data_dir = config
+        else:
+            self.data_dir = get_data_dir(config)
         self.skills_dir = self.data_dir / "skills"
         self.skills_dir.mkdir(parents=True, exist_ok=True)
 
-    def save(self, skill: SkillManifest):
-        """
-        Save a skill manifest.
+    def _get_skill_path(self, skill_id: str) -> Path:
+        """Get file path for a specific skill"""
+        return self.skills_dir / f"{skill_id}.json"
 
-        Args:
-            skill: SkillManifest to save
-        """
-        # Use skill name for filename (sanitized)
-        safe_name = skill.name.replace(' ', '_').lower()
-        filename = f"{safe_name}_{skill.skill_id[:8]}.json"
-        filepath = self.skills_dir / filename
+    def save(self, skill: SkillManifest) -> None:
+        """Save a skill manifest to storage"""
+        skill_path = self._get_skill_path(skill.skill_id)
+        with open(skill_path, 'w', encoding='utf-8') as f:
+            json.dump(skill.to_dict(), f, indent=2)
 
-        with open(filepath, 'w') as f:
-            f.write(skill.to_json())
-
-    def save_many(self, skills: List[SkillManifest]):
-        """
-        Save multiple skills.
-
-        Args:
-            skills: List of SkillManifest objects
-        """
+    def save_batch(self, skills: List[SkillManifest]) -> None:
+        """Save multiple skill manifests"""
         for skill in skills:
             self.save(skill)
 
+    def save_many(self, skills: List[SkillManifest]) -> None:
+        """Alias for save_batch for backward compatibility"""
+        self.save_batch(skills)
+
     def load(self, skill_id: str) -> Optional[SkillManifest]:
-        """
-        Load a specific skill by ID.
+        """Load a specific skill by ID"""
+        skill_path = self._get_skill_path(skill_id)
+        if not skill_path.exists():
+            return None
 
-        Args:
-            skill_id: Skill ID to load (can be short ID)
-
-        Returns:
-            SkillManifest if found, None otherwise
-        """
-        # Search for file containing this ID
-        for skill_file in self.skills_dir.glob(f"*{skill_id[:8]}.json"):
-            with open(skill_file, 'r') as f:
-                return SkillManifest.from_json(f.read())
-
-        return None
-
-    def load_by_name(self, name: str) -> Optional[SkillManifest]:
-        """
-        Load a skill by name.
-
-        Args:
-            name: Skill name
-
-        Returns:
-            SkillManifest if found, None otherwise
-        """
-        safe_name = name.replace(' ', '_').lower()
-
-        for skill_file in self.skills_dir.glob(f"{safe_name}_*.json"):
-            with open(skill_file, 'r') as f:
-                return SkillManifest.from_json(f.read())
-
-        return None
+        with open(skill_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return SkillManifest.from_dict(data)
 
     def load_all(self) -> List[SkillManifest]:
-        """
-        Load all skills.
-
-        Returns:
-            List of all SkillManifest objects
-        """
+        """Load all skills from storage"""
         skills = []
-
-        for skill_file in self.skills_dir.glob("*.json"):
-            with open(skill_file, 'r') as f:
-                skills.append(SkillManifest.from_json(f.read()))
-
-        # Sort by created_at
-        skills.sort(key=lambda s: s.created_at, reverse=True)
-
+        for skill_file in sorted(self.skills_dir.glob("*.json")):
+            with open(skill_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                skills.append(SkillManifest.from_dict(data))
         return skills
 
     def load_by_status(self, status: str) -> List[SkillManifest]:
-        """
-        Load skills by validation status.
-
-        Args:
-            status: Status to filter by (pending, validated, active, deprecated)
-
-        Returns:
-            List of SkillManifest objects with matching status
-        """
+        """Load skills with a specific validation status"""
         all_skills = self.load_all()
         return [s for s in all_skills if s.validation_status == status]
 
-    def load_by_source_pattern(self, pattern_id: str) -> List[SkillManifest]:
-        """
-        Load skills derived from a specific pattern.
+    def load_pending(self) -> List[SkillManifest]:
+        """Load skills pending validation"""
+        return self.load_by_status("pending")
 
-        Args:
-            pattern_id: Pattern ID
+    def load_validated(self) -> List[SkillManifest]:
+        """Load validated skills"""
+        return self.load_by_status("validated")
 
-        Returns:
-            List of SkillManifest objects derived from that pattern
-        """
-        all_skills = self.load_all()
-        return [
-            s for s in all_skills
-            if pattern_id in s.source_pattern_ids or
-            pattern_id[:8] in ' '.join(s.source_pattern_ids)
-        ]
+    def update(self, skill: SkillManifest) -> None:
+        """Update an existing skill (same as save)"""
+        self.save(skill)
 
-    def delete(self, skill_id: str) -> bool:
-        """
-        Delete a skill.
-
-        Args:
-            skill_id: Skill ID to delete
-
-        Returns:
-            True if deleted, False if not found
-        """
-        for skill_file in self.skills_dir.glob(f"*{skill_id[:8]}.json"):
-            skill_file.unlink()
-            return True
-
-        return False
-
-    def update_status(self, skill_id: str, new_status: str) -> bool:
-        """
-        Update a skill's validation status.
-
-        Args:
-            skill_id: Skill ID
-            new_status: New status
-
-        Returns:
-            True if updated, False if not found
-        """
+    def update_validation_status(self, skill_id: str, status: str) -> bool:
+        """Update the validation status of a skill"""
         skill = self.load(skill_id)
-
         if skill is None:
             return False
 
-        skill.validation_status = new_status
+        skill.validation_status = status
         self.save(skill)
         return True
 
-    def get_stats(self) -> dict:
-        """
-        Get skill storage statistics.
+    def delete(self, skill_id: str) -> bool:
+        """Delete a skill from storage"""
+        skill_path = self._get_skill_path(skill_id)
+        if skill_path.exists():
+            skill_path.unlink()
+            return True
+        return False
 
-        Returns:
-            Dictionary with stats
-        """
+    def exists(self, skill_id: str) -> bool:
+        """Check if a skill exists in storage"""
+        return self._get_skill_path(skill_id).exists()
+
+    def count(self) -> int:
+        """Count total number of skills"""
+        return len(list(self.skills_dir.glob("*.json")))
+
+    def count_by_status(self, status: str) -> int:
+        """Count skills with a specific status"""
+        return len(self.load_by_status(status))
+
+    def get_by_pattern(self, pattern_id: str) -> List[SkillManifest]:
+        """Find skills generated from a specific pattern"""
         all_skills = self.load_all()
+        return [
+            s for s in all_skills
+            if pattern_id in s.source_pattern_ids
+        ]
 
-        if not all_skills:
+    def get_by_capability(self, capability: str) -> List[SkillManifest]:
+        """Find skills with a specific capability"""
+        all_skills = self.load_all()
+        return [
+            s for s in all_skills
+            if capability in s.capabilities
+        ]
+
+    def clear_all(self) -> None:
+        """Delete all skills (use with caution!)"""
+        for skill_file in self.skills_dir.glob("*.json"):
+            skill_file.unlink()
+
+    def export_summary(self) -> dict:
+        """Export summary statistics about stored skills"""
+        skills = self.load_all()
+        if not skills:
             return {
                 "total_skills": 0,
-                "by_status": {},
-                "by_genesis_type": {}
+                "pending": 0,
+                "validated": 0,
+                "rejected": 0,
+                "unique_capabilities": 0
             }
 
-        by_status = {}
-        by_genesis_type = {}
+        all_capabilities = set()
+        for skill in skills:
+            all_capabilities.update(skill.capabilities)
 
-        for skill in all_skills:
-            status = skill.validation_status
-            by_status[status] = by_status.get(status, 0) + 1
-
-            genesis = skill.genesis_type
-            by_genesis_type[genesis] = by_genesis_type.get(genesis, 0) + 1
+        status_counts = {
+            "pending": len([s for s in skills if s.validation_status == "pending"]),
+            "validated": len([s for s in skills if s.validation_status == "validated"]),
+            "rejected": len([s for s in skills if s.validation_status == "rejected"])
+        }
 
         return {
-            "total_skills": len(all_skills),
-            "by_status": by_status,
-            "by_genesis_type": by_genesis_type,
-            "avg_usage_count": sum(s.usage_count for s in all_skills) / len(all_skills) if all_skills else 0
+            "total_skills": len(skills),
+            **status_counts,
+            "unique_capabilities": len(all_capabilities),
+            "capabilities": sorted(all_capabilities)
         }

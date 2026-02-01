@@ -1,316 +1,332 @@
 """
 Core data models for ESASS prototype.
 
-Simplified versions of specification types from esass-specification_v0.01.md:
-- LogEntry (§4.3): Observation records
-- PatternDefinition (§3.1.2): Detected patterns
-- SkillManifest (§3.1.3): Generated skills
+Aligned with specification sections 3 and 4.
 """
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from enum import Enum
-from uuid import uuid4
+import uuid
 import json
 
 
-# Event Types (§4.4 of specification)
 class EventType(Enum):
-    """Types of events captured during observation"""
+    """Event types from specification §4.3"""
     REASONING = "reasoning"
     TOOL_USAGE = "tool_usage"
     DECISION = "decision"
-    OUTPUT = "output"
+    ERROR = "error"
+    OUTCOME = "outcome"
 
 
-# Log Levels (§4.2 of specification)
-class LogLevel(Enum):
-    """Hierarchical log retention levels"""
-    TRACE = "L0"      # 24 hours
-    DEBUG = "L1"      # 7 days
-    INFO = "L2"       # 90 days
-    SUMMARY = "L3"    # Indefinite
-    INSIGHT = "L4"    # Permanent
-
-
-# Pattern Types (§5.1 of specification)
 class PatternType(Enum):
-    """Categories of detected patterns"""
-    TEMPORAL = "temporal"          # Sequences, cycles
-    STRUCTURAL = "structural"      # Tool combinations
-    SEMANTIC = "semantic"          # Conceptual clustering
-    BEHAVIORAL = "behavioral"      # Response styles
+    """Pattern types"""
+    TEMPORAL = "temporal"
+    SEMANTIC = "semantic"
+    HYBRID = "hybrid"
 
 
 @dataclass
 class LogEntry:
     """
-    Simplified observation record from §4.3 of specification.
+    Observation log entry (§4.3)
 
-    Captures execution events with causality tracking.
+    Captures individual events with causality tracking and metadata.
     """
-    entry_id: str = field(default_factory=lambda: str(uuid4()))
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    level: str = LogLevel.INFO.value
-    event_type: str = EventType.REASONING.value
-    event_data: Dict[str, Any] = field(default_factory=dict)
-    session_id: str = ""
-    caused_by: List[str] = field(default_factory=list)
+    event_id: str
+    timestamp: str  # ISO format
+    event_type: str
+    event_data: Dict[str, Any]
+    session_id: str
+    caused_by: Optional[str] = None
     tags: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    @property
+    def entry_id(self) -> str:
+        """Alias for event_id for backward compatibility"""
+        return self.event_id
+
+    def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'LogEntry':
+    def from_dict(cls, data: dict) -> 'LogEntry':
         """Create from dictionary"""
         return cls(**data)
 
-    def to_json(self) -> str:
-        """Convert to JSON string"""
-        return json.dumps(self.to_dict())
-
     @classmethod
-    def from_json(cls, json_str: str) -> 'LogEntry':
-        """Create from JSON string"""
-        return cls.from_dict(json.loads(json_str))
-
-
-@dataclass
-class PatternQualityMetrics:
-    """
-    Pattern quality metrics from §5.3 of specification.
-    """
-    support: int = 0              # How many instances
-    confidence: float = 0.0       # 0.0-1.0 reliability
-    lift: float = 1.0             # Surprising vs baseline
-    stability_days: int = 0       # Days pattern has been stable
-    coherence: float = 0.0        # Internal consistency
-    distinctiveness: float = 0.0  # Separation from other patterns
-
-    def meets_candidacy_criteria(self) -> bool:
-        """
-        Check if pattern meets skill candidacy criteria (§6.2).
-
-        Criteria:
-        - Support ≥ 10 instances
-        - Confidence ≥ 0.8
-        - Stability ≥ 7 days
-        """
-        return (
-            self.support >= 10 and
-            self.confidence >= 0.8 and
-            self.stability_days >= 7
+    def create(cls, event_type: str, event_data: Dict[str, Any],
+               session_id: str, caused_by: Optional[str] = None,
+               tags: Optional[List[str]] = None) -> 'LogEntry':
+        """Factory method to create a new log entry"""
+        return cls(
+            event_id=str(uuid.uuid4()),
+            timestamp=datetime.utcnow().isoformat(),
+            event_type=event_type,
+            event_data=event_data,
+            session_id=session_id,
+            caused_by=caused_by,
+            tags=tags or []
         )
 
 
 @dataclass
 class PatternDefinition:
     """
-    Simplified pattern definition from §3.1.2 of specification.
+    Detected temporal pattern (§3.1.2)
 
-    Represents a recurring structure detected in observation logs.
+    Represents a recurring sequence of events with quality metrics.
     """
-    pattern_id: str = field(default_factory=lambda: str(uuid4()))
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    pattern_type: str = PatternType.TEMPORAL.value
+    pattern_type: str
+    support: int
+    confidence: float
+    stability_days: int
+    description: str
+    sequence: List[str]  # Event type signatures (e.g., "reasoning:git", "tool_usage:git,status")
+    exemplar_ids: List[str]  # Event IDs showing this pattern
+    skill_candidate: bool
+    tags: List[str]
+    first_seen: str  # ISO timestamp
+    last_seen: str  # ISO timestamp
+    pattern_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
-    # Quality metrics (§5.3 of specification)
-    support: int = 0              # How many instances
-    confidence: float = 0.0       # 0.0-1.0
-    stability_days: int = 0       # Days pattern has been stable
-
-    # Structure
-    description: str = ""
-    sequence: List[str] = field(default_factory=list)  # Event type sequence
-    exemplar_ids: List[str] = field(default_factory=list)  # Example log entries
-
-    # Genesis potential
-    skill_candidate: bool = False
-
-    # Additional metadata
-    first_seen: Optional[str] = None
-    last_seen: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PatternDefinition':
+    def from_dict(cls, data: dict) -> 'PatternDefinition':
         """Create from dictionary"""
         return cls(**data)
 
-    def to_json(self) -> str:
-        """Convert to JSON string"""
-        return json.dumps(self.to_dict(), indent=2)
+    # Backward compatibility properties
+    @property
+    def metrics(self):
+        """Provide backward compatible metrics access"""
+        from collections import namedtuple
+        Metrics = namedtuple('Metrics', ['support', 'confidence', 'stability_days'])
+        return Metrics(self.support, self.confidence, self.stability_days)
+
+
+@dataclass
+class TriggerCondition:
+    """Trigger condition for skill activation (§3.1.3)"""
+    trigger_type: str  # "intent_match", "event_type", "context_match"
+    pattern: str
+    confidence_threshold: float = 0.8
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'PatternDefinition':
-        """Create from JSON string"""
-        return cls.from_dict(json.loads(json_str))
-
-    def get_quality_metrics(self) -> PatternQualityMetrics:
-        """Get pattern quality metrics"""
-        return PatternQualityMetrics(
-            support=self.support,
-            confidence=self.confidence,
-            stability_days=self.stability_days
-        )
+    def from_dict(cls, data: dict) -> 'TriggerCondition':
+        return cls(**data)
 
 
 @dataclass
 class SkillManifest:
     """
-    Simplified skill manifest from §3.1.3 of specification.
+    Skill manifest (§3.1.3)
 
-    Complete specification of an auto-generated skill.
+    Generated from validated patterns, ready for implementation.
     """
-    skill_id: str = field(default_factory=lambda: str(uuid4()))
-    version: str = "0.1.0"
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    genesis_type: str = "derived"  # derived, authored, hybrid
-
-    # Identity
-    name: str = ""
-    description: str = ""
+    name: str
+    description: str
+    source_pattern_ids: List[str]
+    triggers: List[TriggerCondition]
+    capabilities: List[str]
+    implementation_summary: str
+    genesis_type: str = "derived"
     keywords: List[str] = field(default_factory=list)
-
-    # Lineage
-    source_pattern_ids: List[str] = field(default_factory=list)
-    parent_skills: List[str] = field(default_factory=list)
-
-    # Specification
-    triggers: List[str] = field(default_factory=list)
-    capabilities: List[str] = field(default_factory=list)
-    constraints: List[str] = field(default_factory=list)
-
-    # Implementation (simplified - just a description for prototype)
-    implementation_summary: str = ""
-
-    # Quality
-    validation_status: str = "pending"  # pending, validated, active, deprecated
+    tags: List[str] = field(default_factory=list)
+    validation_status: str = "pending"  # pending, validated, rejected
+    version: str = "0.1.0"
     usage_count: int = 0
     success_rate: float = 0.0
+    skill_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
-    # Metadata
-    tags: List[str] = field(default_factory=list)
-    notes: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
-        return asdict(self)
+        data = asdict(self)
+        # Handle both string triggers and TriggerCondition objects
+        if self.triggers:
+            if isinstance(self.triggers[0], str):
+                data['triggers'] = self.triggers
+            else:
+                data['triggers'] = [t.to_dict() if hasattr(t, 'to_dict') else t for t in self.triggers]
+        return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SkillManifest':
+    def from_dict(cls, data: dict) -> 'SkillManifest':
         """Create from dictionary"""
-        return cls(**data)
-
-    def to_json(self) -> str:
-        """Convert to JSON string"""
-        return json.dumps(self.to_dict(), indent=2)
+        triggers_data = data.pop('triggers')
+        triggers = [TriggerCondition.from_dict(t) for t in triggers_data]
+        return cls(triggers=triggers, **data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'SkillManifest':
-        """Create from JSON string"""
-        return cls.from_dict(json.loads(json_str))
+    def create(cls, name: str, description: str, source_pattern_ids: List[str],
+               triggers: List[TriggerCondition], capabilities: List[str],
+               implementation_summary: str) -> 'SkillManifest':
+        """Factory method to create a new skill manifest"""
+        return cls(
+            skill_id=str(uuid.uuid4()),
+            name=name,
+            description=description,
+            source_pattern_ids=source_pattern_ids,
+            triggers=triggers,
+            capabilities=capabilities,
+            implementation_summary=implementation_summary,
+            created_at=datetime.utcnow().isoformat()
+        )
 
 
 @dataclass
 class ObserverState:
     """
-    Runtime state for observation controller.
+    Runtime state for observation subsystem
+
+    Tracks whether observation is active and metadata.
     """
-    is_enabled: bool = False
+    enabled: bool = False
+    mode: str = "simulation"  # "simulation" or "capture"
     started_at: Optional[str] = None
-    stopped_at: Optional[str] = None
-    total_sessions: int = 0
-    total_events: int = 0
+    session_count: int = 0
+    event_count: int = 0
+    total_sessions: int = 0  # Backward compatibility
+    total_events: int = 0  # Backward compatibility
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
+    def to_dict(self) -> dict:
         return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ObserverState':
-        """Create from dictionary"""
-        return cls(**data)
 
     def to_json(self) -> str:
         """Convert to JSON string"""
         return json.dumps(self.to_dict(), indent=2)
 
     @classmethod
+    def from_dict(cls, data: dict) -> 'ObserverState':
+        return cls(**data)
+
+    @classmethod
     def from_json(cls, json_str: str) -> 'ObserverState':
         """Create from JSON string"""
-        return cls.from_dict(json.loads(json_str))
+        data = json.loads(json_str)
+        return cls.from_dict(data)
 
 
-# Helper functions for common operations
+def serialize_to_json(obj: Any) -> str:
+    """Serialize any model to JSON string"""
+    if hasattr(obj, 'to_dict'):
+        return json.dumps(obj.to_dict(), indent=2)
+    return json.dumps(obj, indent=2)
 
-def create_reasoning_event(
-    statement: str,
-    confidence: float,
-    session_id: str,
-    tags: List[str],
-    caused_by: Optional[List[str]] = None
-) -> LogEntry:
-    """Create a reasoning event log entry"""
-    return LogEntry(
+
+def deserialize_from_json(json_str: str, model_class: type) -> Any:
+    """Deserialize JSON string to model instance"""
+    data = json.loads(json_str)
+    if hasattr(model_class, 'from_dict'):
+        return model_class.from_dict(data)
+    return model_class(**data)
+
+
+# Helper factory functions for creating specific event types
+
+def create_reasoning_event(statement: Optional[str] = None,
+                           hypothesis: Optional[str] = None,
+                           confidence: float = 0.0,
+                           evidence: Optional[List[str]] = None,
+                           session_id: str = "",
+                           caused_by: Optional[Any] = None,
+                           tags: Optional[List[str]] = None) -> LogEntry:
+    """Create a reasoning event"""
+    # Support both 'statement' and 'hypothesis' for backward compatibility
+    reasoning_text = statement or hypothesis or ""
+
+    # Handle caused_by as either string or list
+    caused_by_id = None
+    if caused_by:
+        if isinstance(caused_by, list):
+            caused_by_id = caused_by[0] if caused_by else None
+        else:
+            caused_by_id = caused_by
+
+    event_data = {
+        "statement": reasoning_text,
+        "confidence": confidence,
+    }
+    if evidence:
+        event_data["evidence"] = evidence
+
+    return LogEntry.create(
         event_type=EventType.REASONING.value,
-        event_data={
-            "statement": statement,
-            "confidence": confidence,
-            "subtype": "hypothesis_generation"
-        },
+        event_data=event_data,
         session_id=session_id,
-        tags=tags,
-        caused_by=caused_by or []
+        caused_by=caused_by_id,
+        tags=tags or ["reasoning"]
     )
 
 
-def create_tool_usage_event(
-    tool_name: str,
-    parameters: Dict[str, Any],
-    outcome_assessment: str,
-    session_id: str,
-    tags: List[str],
-    caused_by: Optional[List[str]] = None
-) -> LogEntry:
-    """Create a tool usage event log entry"""
-    return LogEntry(
+def create_tool_usage_event(tool_name: str,
+                            parameters: Dict[str, Any],
+                            outcome_assessment: str,
+                            session_id: str = "",
+                            caused_by: Optional[Any] = None,
+                            tags: Optional[List[str]] = None) -> LogEntry:
+    """Create a tool usage event"""
+    # Handle caused_by as either string or list
+    caused_by_id = None
+    if caused_by:
+        if isinstance(caused_by, list):
+            caused_by_id = caused_by[0] if caused_by else None
+        else:
+            caused_by_id = caused_by
+
+    event_data = {
+        "tool_name": tool_name,
+        "parameters": parameters,
+        "outcome_assessment": outcome_assessment
+    }
+    return LogEntry.create(
         event_type=EventType.TOOL_USAGE.value,
-        event_data={
-            "tool_name": tool_name,
-            "parameters": parameters,
-            "outcome_assessment": outcome_assessment,
-            "phase": "invocation"
-        },
+        event_data=event_data,
         session_id=session_id,
-        tags=tags,
-        caused_by=caused_by or []
+        caused_by=caused_by_id,
+        tags=tags or ["tool_usage", tool_name]
     )
 
 
-def create_decision_event(
-    decision: str,
-    confidence: float,
-    session_id: str,
-    tags: List[str],
-    caused_by: Optional[List[str]] = None
-) -> LogEntry:
-    """Create a decision event log entry"""
-    return LogEntry(
+def create_decision_event(decision: str,
+                         confidence: float = 0.0,
+                         options_considered: Optional[List[str]] = None,
+                         rationale: Optional[str] = None,
+                         session_id: str = "",
+                         caused_by: Optional[Any] = None,
+                         tags: Optional[List[str]] = None) -> LogEntry:
+    """Create a decision event"""
+    # Handle caused_by as either string or list
+    caused_by_id = None
+    if caused_by:
+        if isinstance(caused_by, list):
+            caused_by_id = caused_by[0] if caused_by else None
+        else:
+            caused_by_id = caused_by
+
+    event_data = {
+        "decision": decision,
+        "confidence": confidence,
+    }
+    if options_considered:
+        event_data["options_considered"] = options_considered
+    if rationale:
+        event_data["rationale"] = rationale
+
+    return LogEntry.create(
         event_type=EventType.DECISION.value,
-        event_data={
-            "decision": decision,
-            "confidence": confidence,
-            "decision_class": "strategy_selection"
-        },
+        event_data=event_data,
         session_id=session_id,
-        tags=tags,
-        caused_by=caused_by or []
+        caused_by=caused_by_id,
+        tags=tags or ["decision"]
     )

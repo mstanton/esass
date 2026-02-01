@@ -253,3 +253,60 @@ Observations → Patterns → Skills → Usage Experiences → Evolution → Imp
 ```
 
 Skills aren't just created—they're refined over time based on actual usage, forming a self-improving system.
+
+---
+
+## Ecosystem Dynamics & Advanced Emergence
+
+### Ecosystem Perspective
+
+**Key Insight**: Patterns exist in ecological relationships - not as isolated entities, but as components of a dynamic emergence ecosystem.
+
+**Pattern Interaction Types**:
+- **Symbiotic**: Patterns that enhance each other (e.g., debugging + documentation)
+- **Competitive**: Patterns competing for same contexts
+- **Predatory**: Powerful patterns suppressing emerging competitors
+- **Mutualistic**: Bidirectional beneficial relationships
+- **Niche-based**: Patterns dominating specific interaction contexts
+
+**Ecosystem Metrics**:
+- `keystone_importance`: How critical a pattern is to ecosystem stability (0-1)
+- `niche_breadth`: Range of contexts where pattern is effective
+- `ecosystem_stability_impact`: Pattern's effect on overall ecosystem health
+
+### Proto-Patterns and Fossil Reconstruction
+
+**Proto-Patterns**: Incomplete skill precursors showing potential but lacking full structure.
+
+**Key Metrics**:
+- `fossil_completeness`: % of expected skill structure observed (min 40%)
+- `turbulence_score`: High entropy with positive outcomes (edge of chaos)
+- `catalytic_factor`: Impact on enabling other patterns
+
+**Emergence Phases**: Latent → Crystallizing → Stable
+
+### Multi-Scale Dynamics
+
+Skills emerge across three scales with cross-scale coupling:
+
+| Scale | Examples | Metric |
+|-------|----------|--------|
+| Micro | Word choice, timing | Aggregates upward |
+| Meso | Workflow structures | Bidirectional |
+| Macro | Domain expertise | Constrains downward |
+
+**Validation Requirement**: `cross_scale_coherence` ≥ 0.7
+
+### Exploration Mechanisms
+
+**Edge of Chaos Principle**: Most valuable skills emerge from transitional states.
+
+**Strategies**:
+1. **Anomaly Harvesting**: Seek rare (1-in-10,000) successful interactions
+2. **Boundary Testing**: Probe capability limits
+3. **Pattern Mutation**: Intentionally vary patterns to test robustness
+4. **Fossil Reconstruction**: Complete incomplete patterns using Markov prediction
+
+---
+
+**See Also**: [CRITIQUE_SYNTHESIS.md](CRITIQUE_SYNTHESIS.md) for detailed integration guidance.
