@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(python -m esass_prototype.cli pipeline:*)",
+      "Bash(pip install:*)",
+      "Bash(python test_pipeline.py:*)",
+      "Bash(ls:*)",
+      "Bash(python -c:*)",
+      "Bash(curl:*)",
+      "Bash(sh)",
+      "Bash(python setup_files.py:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run python:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(find:*)",
+      "Bash(uv run esass --help:*)",
+      "Bash(uv run:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)"
     ]
   }
 }

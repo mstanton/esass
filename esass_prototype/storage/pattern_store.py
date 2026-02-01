@@ -1,149 +1,145 @@
 """
-Pattern storage using JSON files.
+Pattern storage using JSON format.
 
-Provides storage and retrieval for detected patterns.
+Stores detected patterns with metadata and quality metrics.
 """
 
+import json
 from pathlib import Path
 from typing import List, Optional
-import json
 
-from esass_prototype.models import PatternDefinition
+from ..config import ESASSConfig, get_data_dir
+from ..models import PatternDefinition
 
 
 class PatternStore:
-    """
-    Storage for pattern definitions using JSON files.
+    """Manages pattern storage in JSON files"""
 
-    Each pattern is stored in its own file for easy inspection.
-    """
-
-    def __init__(self, data_dir: Path):
-        """
-        Initialize pattern store.
-
-        Args:
-            data_dir: Base directory for data storage
-        """
-        self.data_dir = Path(data_dir)
+    def __init__(self, config: Optional[ESASSConfig] = None):
+        # Handle both Path and ESASSConfig
+        if isinstance(config, Path):
+            self.data_dir = config
+        else:
+            self.data_dir = get_data_dir(config)
         self.patterns_dir = self.data_dir / "patterns"
         self.patterns_dir.mkdir(parents=True, exist_ok=True)
 
-    def save(self, pattern: PatternDefinition):
-        """
-        Save a pattern definition.
+    def _get_pattern_path(self, pattern_id: str) -> Path:
+        """Get file path for a specific pattern"""
+        return self.patterns_dir / f"{pattern_id}.json"
 
-        Args:
-            pattern: PatternDefinition to save
-        """
-        filename = f"pattern_{pattern.pattern_id[:8]}.json"
-        filepath = self.patterns_dir / filename
+    def save(self, pattern: PatternDefinition) -> None:
+        """Save a pattern to storage"""
+        pattern_path = self._get_pattern_path(pattern.pattern_id)
+        with open(pattern_path, 'w', encoding='utf-8') as f:
+            json.dump(pattern.to_dict(), f, indent=2)
 
-        with open(filepath, 'w') as f:
-            f.write(pattern.to_json())
-
-    def save_many(self, patterns: List[PatternDefinition]):
-        """
-        Save multiple patterns.
-
-        Args:
-            patterns: List of PatternDefinition objects
-        """
+    def save_batch(self, patterns: List[PatternDefinition]) -> None:
+        """Save multiple patterns"""
         for pattern in patterns:
             self.save(pattern)
 
+    def save_many(self, patterns: List[PatternDefinition]) -> None:
+        """Alias for save_batch for backward compatibility"""
+        self.save_batch(patterns)
+
     def load(self, pattern_id: str) -> Optional[PatternDefinition]:
-        """
-        Load a specific pattern by ID.
-
-        Args:
-            pattern_id: Pattern ID to load
-
-        Returns:
-            PatternDefinition if found, None otherwise
-        """
-        # Try short ID (first 8 chars)
-        filename = f"pattern_{pattern_id[:8]}.json"
-        filepath = self.patterns_dir / filename
-
-        if not filepath.exists():
+        """Load a specific pattern by ID"""
+        pattern_path = self._get_pattern_path(pattern_id)
+        if not pattern_path.exists():
             return None
 
-        with open(filepath, 'r') as f:
-            return PatternDefinition.from_json(f.read())
+        with open(pattern_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return PatternDefinition.from_dict(data)
 
     def load_all(self) -> List[PatternDefinition]:
-        """
-        Load all patterns.
-
-        Returns:
-            List of all PatternDefinition objects
-        """
+        """Load all patterns from storage"""
         patterns = []
-
-        for pattern_file in self.patterns_dir.glob("pattern_*.json"):
-            with open(pattern_file, 'r') as f:
-                patterns.append(PatternDefinition.from_json(f.read()))
-
-        # Sort by created_at
-        patterns.sort(key=lambda p: p.created_at, reverse=True)
-
+        for pattern_file in sorted(self.patterns_dir.glob("*.json")):
+            try:
+                with open(pattern_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    patterns.append(PatternDefinition.from_dict(data))
+            except (json.JSONDecodeError, ValueError) as e:
+                # Skip malformed or empty files
+                print(f"Warning: Skipping malformed file {pattern_file.name}: {e}")
+                continue
         return patterns
 
     def load_candidates(self) -> List[PatternDefinition]:
-        """
-        Load only patterns that are skill candidates.
-
-        Returns:
-            List of PatternDefinition objects where skill_candidate=True
-        """
+        """Load only patterns marked as skill candidates"""
         all_patterns = self.load_all()
         return [p for p in all_patterns if p.skill_candidate]
 
+    def update(self, pattern: PatternDefinition) -> None:
+        """Update an existing pattern (same as save)"""
+        self.save(pattern)
+
     def delete(self, pattern_id: str) -> bool:
-        """
-        Delete a pattern.
-
-        Args:
-            pattern_id: Pattern ID to delete
-
-        Returns:
-            True if deleted, False if not found
-        """
-        filename = f"pattern_{pattern_id[:8]}.json"
-        filepath = self.patterns_dir / filename
-
-        if filepath.exists():
-            filepath.unlink()
+        """Delete a pattern from storage"""
+        pattern_path = self._get_pattern_path(pattern_id)
+        if pattern_path.exists():
+            pattern_path.unlink()
             return True
-
         return False
 
-    def get_stats(self) -> dict:
-        """
-        Get pattern storage statistics.
+    def exists(self, pattern_id: str) -> bool:
+        """Check if a pattern exists in storage"""
+        return self._get_pattern_path(pattern_id).exists()
 
-        Returns:
-            Dictionary with stats
-        """
+    def count(self) -> int:
+        """Count total number of patterns"""
+        return len(list(self.patterns_dir.glob("*.json")))
+
+    def count_candidates(self) -> int:
+        """Count patterns marked as skill candidates"""
+        return len(self.load_candidates())
+
+    def get_by_sequence(self, sequence: List[str]) -> List[PatternDefinition]:
+        """Find patterns matching a specific sequence"""
         all_patterns = self.load_all()
+        return [p for p in all_patterns if p.sequence == sequence]
 
-        if not all_patterns:
+    def get_high_quality(self, min_support: int = 10,
+                         min_confidence: float = 0.8,
+                         min_stability_days: int = 7) -> List[PatternDefinition]:
+        """Get patterns meeting quality thresholds"""
+        all_patterns = self.load_all()
+        return [
+            p for p in all_patterns
+            if (p.support >= min_support and
+                p.confidence >= min_confidence and
+                p.stability_days >= min_stability_days)
+        ]
+
+    def clear_all(self) -> None:
+        """Delete all patterns (use with caution!)"""
+        for pattern_file in self.patterns_dir.glob("*.json"):
+            pattern_file.unlink()
+
+    def export_summary(self) -> dict:
+        """Export summary statistics about stored patterns"""
+        patterns = self.load_all()
+        if not patterns:
             return {
                 "total_patterns": 0,
                 "skill_candidates": 0,
-                "by_type": {}
+                "avg_support": 0,
+                "avg_confidence": 0,
+                "avg_stability_days": 0
             }
 
-        by_type = {}
-        for pattern in all_patterns:
-            ptype = pattern.pattern_type
-            by_type[ptype] = by_type.get(ptype, 0) + 1
-
+        candidates = [p for p in patterns if p.skill_candidate]
         return {
-            "total_patterns": len(all_patterns),
-            "skill_candidates": len([p for p in all_patterns if p.skill_candidate]),
-            "by_type": by_type,
-            "avg_support": sum(p.support for p in all_patterns) / len(all_patterns),
-            "avg_confidence": sum(p.confidence for p in all_patterns) / len(all_patterns)
+            "total_patterns": len(patterns),
+            "skill_candidates": len(candidates),
+            "avg_support": sum(p.support for p in patterns) / len(patterns),
+            "avg_confidence": sum(p.confidence for p in patterns) / len(patterns),
+            "avg_stability_days": sum(p.stability_days for p in patterns) / len(patterns),
+            "unique_sequences": len(set(tuple(p.sequence) for p in patterns))
         }
+
+    def get_stats(self) -> dict:
+        """Get statistics about stored patterns (alias for export_summary)"""
+        return self.export_summary()

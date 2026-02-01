@@ -220,6 +220,216 @@ Based on specifications, the full system will require:
    - No "black box" transformations
    - Every adaptation is documented
 
+### Working with the Probe System
+
+**Status**: ✅ Production-ready probe infrastructure implemented (`esass/probes/`)
+
+The probe system provides real-time event capture from Claude Code execution. When working with or extending the probe system:
+
+#### Running Probe Tests
+
+```bash
+# All probe tests (27 tests, ~85% coverage)
+pytest tests/test_probes.py -v
+
+# With coverage report
+pytest tests/test_probes.py --cov=esass.probes --cov-report=html
+
+# Specific probe type
+pytest tests/test_probes.py::TestToolCallProbe -v
+
+# Integration example
+python -c "import sys; sys.path.insert(0, '.'); \
+from examples.claude_code_integration import example_simulated_session; \
+example_simulated_session()"
+```
+
+#### Adding New Probe Types
+
+When creating a new probe:
+
+1. **Extend Base Classes**:
+   ```python
+   from esass.probes.base import FilteringProbe, ProbeContext
+
+   class MyCustomProbe(FilteringProbe):
+       def can_observe(self, event_type: str) -> bool:
+           """Define which event types this probe handles"""
+           return event_type in ['my_event_type', 'another_type']
+
+       def observe_filtered(self, context: ProbeContext) -> Optional[List[LogEntry]]:
+           """Process event and return log entries"""
+           # Extract data from context
+           # Create LogEntry objects
+           # Return list of entries
+           pass
+   ```
+
+2. **Add Configuration**:
+   ```python
+   # In esass/probes/config.py
+   @dataclass
+   class MyCustomProbeConfig(ProbeConfig):
+       custom_setting: bool = True
+       threshold: float = 0.5
+   ```
+
+3. **Register in create_default_probes()**:
+   ```python
+   # In esass/probes/config.py
+   def create_default_probes(config: ESASSProbeSystemConfig) -> List:
+       probes = []
+       # ... existing probes ...
+
+       if config.my_custom_probe.enabled:
+           probes.append(MyCustomProbe(
+               enabled=config.my_custom_probe.enabled,
+               custom_setting=config.my_custom_probe.custom_setting
+           ))
+
+       return probes
+   ```
+
+4. **Write Tests**:
+   ```python
+   # In tests/test_probes.py
+   class TestMyCustomProbe:
+       def test_can_observe_correct_events(self):
+           probe = MyCustomProbe()
+           assert probe.can_observe('my_event_type')
+           assert not probe.can_observe('unrelated_event')
+
+       def test_observe_generates_entries(self):
+           probe = MyCustomProbe()
+           context = ProbeContext(
+               event_type='my_event_type',
+               event_data={'key': 'value'},
+               session_id='test'
+           )
+           entries = probe.observe(context)
+           assert entries is not None
+           assert len(entries) > 0
+   ```
+
+5. **Update Documentation**:
+   - Add to `esass/probes/README.md`
+   - Document event types observed
+   - Explain configuration options
+   - Provide usage examples
+
+#### Probe Development Best Practices
+
+1. **Error Handling**: Probes should never crash the system
+   ```python
+   def observe_filtered(self, context: ProbeContext) -> Optional[List[LogEntry]]:
+       try:
+           # Process event
+           return entries
+       except Exception as e:
+           # Log error but don't raise
+           logger.error(f"Probe error: {e}", exc_info=True)
+           return None
+   ```
+
+2. **Performance**: Keep processing lightweight (<1ms per event)
+   ```python
+   # Good: Quick checks before heavy processing
+   if not self._should_process(context):
+       return None
+
+   # Bad: Heavy processing on every event
+   result = expensive_operation(context.event_data)
+   ```
+
+3. **Data Sanitization**: Never log sensitive information
+   ```python
+   def _sanitize_parameters(self, parameters: Dict) -> Dict:
+       sanitized = parameters.copy()
+       sensitive_keys = ['password', 'token', 'api_key', 'secret']
+       for key in list(sanitized.keys()):
+           if any(s in key.lower() for s in sensitive_keys):
+               sanitized[key] = '[REDACTED]'
+       return sanitized
+   ```
+
+4. **Tag Extraction**: Use TagExtractor for semantic tags
+   ```python
+   from esass.probes.base import TagExtractor
+
+   tags = TagExtractor.extract_from_tool(tool_name, parameters)
+   tags.extend(TagExtractor.extract_from_text(message))
+   ```
+
+#### Probe System Architecture
+
+```text
+Probe Hierarchy:
+  Probe (ABC)
+    ├── FilteringProbe (adds filtering capabilities)
+    │   ├── ToolCallProbe
+    │   │   └── ToolSequenceDetector (adds sequence detection)
+    │   ├── ReasoningProbe
+    │   │   └── CausalReasoningProbe (adds causal detection)
+    │   └── DecisionProbe
+    │       └── TradeoffAnalysisProbe (adds tradeoff detection)
+    └── [Your Custom Probe]
+```
+
+#### Integration with Claude Code
+
+To capture events from Claude Code:
+
+1. **Initialize System** (at startup):
+   ```python
+   from esass.probes.config import initialize_system
+   registry, pipeline, config = initialize_system()
+   ```
+
+2. **Add Hooks** (in tool execution pipeline):
+   ```python
+   from examples.claude_code_integration import (
+       notify_tool_call_start,
+       notify_tool_call_complete,
+       notify_tool_call_error
+   )
+
+   def execute_tool(tool_name, parameters, context):
+       call_id = notify_tool_call_start(tool_name, parameters, context)
+       try:
+           result = _actual_execution(tool_name, parameters)
+           notify_tool_call_complete(call_id, result, context)
+           return result
+       except Exception as e:
+           notify_tool_call_error(call_id, e, context)
+           raise
+   ```
+
+3. **Shutdown** (at exit):
+   ```python
+   registry.flush()
+   pipeline.shutdown(timeout=10.0)
+   ```
+
+#### Performance Targets
+
+When developing probes, aim for these benchmarks:
+
+| Metric | Target |
+|--------|--------|
+| Observation latency | <5ms |
+| Memory per probe | <10MB |
+| Event processing | >1000 events/sec per probe |
+| Error rate | <0.1% |
+
+#### Documentation
+
+Key probe system documentation:
+
+- **esass/probes/README.md** - Complete probe system reference
+- **INTEGRATION_PLAN.md** - 26-week integration roadmap
+- **PROBE_IMPLEMENTATION_SUMMARY.md** - Implementation details
+- **examples/claude_code_integration.py** - Working integration example
+
 ## Configuration
 
 Two environment modes planned:

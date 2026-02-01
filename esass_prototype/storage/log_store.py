@@ -1,192 +1,163 @@
 """
-Log storage using JSON Lines (JSONL) format.
+Log storage using JSONL format.
 
-Provides efficient append-only storage for observation logs.
+Stores observation logs in daily JSONL files for efficient append operations.
 """
 
-from pathlib import Path
-from datetime import datetime
-from typing import List, Optional
 import json
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import List, Optional
 
-from esass_prototype.models import LogEntry
+from ..config import ESASSConfig, get_data_dir
+from ..models import LogEntry
 
 
 class LogStore:
-    """
-    Storage for observation logs using JSONL format.
+    """Manages JSONL log files organized by date"""
 
-    Features:
-    - Append-only writes (efficient for streaming)
-    - Daily log files for easy management
-    - Line-based reading (incremental processing)
-    """
-
-    def __init__(self, data_dir: Path):
-        """
-        Initialize log store.
-
-        Args:
-            data_dir: Base directory for data storage
-        """
-        self.data_dir = Path(data_dir)
+    def __init__(self, config: Optional[ESASSConfig] = None):
+        # Handle both Path and ESASSConfig
+        if isinstance(config, Path):
+            self.data_dir = config
+        else:
+            self.data_dir = get_data_dir(config)
         self.logs_dir = self.data_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
-    def save(self, entry: LogEntry):
-        """
-        Save a single log entry.
+    def _get_log_path(self, date: datetime) -> Path:
+        """Get log file path for a specific date"""
+        filename = f"log_{date.strftime('%Y%m%d')}.jsonl"
+        return self.logs_dir / filename
 
-        Args:
-            entry: LogEntry to save
-        """
-        # Determine file based on entry timestamp
-        date = datetime.fromisoformat(entry.timestamp).date()
-        log_file = self.logs_dir / f"{date.isoformat()}.jsonl"
+    def append(self, entry: LogEntry) -> None:
+        """Append a log entry to the appropriate daily file"""
+        timestamp = datetime.fromisoformat(entry.timestamp)
+        log_path = self._get_log_path(timestamp)
 
-        # Append to file
-        with open(log_file, 'a') as f:
-            f.write(entry.to_json() + '\n')
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry.to_dict()) + '\n')
 
-    def save_many(self, entries: List[LogEntry]):
-        """
-        Save multiple log entries efficiently.
-
-        Args:
-            entries: List of LogEntry objects
-        """
+    def append_batch(self, entries: List[LogEntry]) -> None:
+        """Append multiple log entries efficiently"""
         # Group by date
         entries_by_date = {}
         for entry in entries:
-            date = datetime.fromisoformat(entry.timestamp).date()
-            if date not in entries_by_date:
-                entries_by_date[date] = []
-            entries_by_date[date].append(entry)
+            timestamp = datetime.fromisoformat(entry.timestamp)
+            date_key = timestamp.date()
+            if date_key not in entries_by_date:
+                entries_by_date[date_key] = []
+            entries_by_date[date_key].append(entry)
 
-        # Write to files
+        # Write to each file
         for date, date_entries in entries_by_date.items():
-            log_file = self.logs_dir / f"{date.isoformat()}.jsonl"
-            with open(log_file, 'a') as f:
+            log_path = self._get_log_path(datetime.combine(date, datetime.min.time()))
+            with open(log_path, 'a', encoding='utf-8') as f:
                 for entry in date_entries:
-                    f.write(entry.to_json() + '\n')
+                    f.write(json.dumps(entry.to_dict()) + '\n')
 
-    def load_by_date(self, date: datetime.date) -> List[LogEntry]:
-        """
-        Load all log entries for a specific date.
+    def save_many(self, entries: List[LogEntry]) -> None:
+        """Alias for append_batch for backward compatibility"""
+        self.append_batch(entries)
 
-        Args:
-            date: Date to load logs for
-
-        Returns:
-            List of LogEntry objects for that date
-        """
-        log_file = self.logs_dir / f"{date.isoformat()}.jsonl"
-
-        if not log_file.exists():
+    def read_date(self, date: datetime) -> List[LogEntry]:
+        """Read all log entries for a specific date"""
+        log_path = self._get_log_path(date)
+        if not log_path.exists():
             return []
 
         entries = []
-        with open(log_file, 'r') as f:
+        with open(log_path, 'r', encoding='utf-8') as f:
             for line in f:
-                if line.strip():
-                    entries.append(LogEntry.from_json(line))
-
+                line = line.strip()
+                if line:
+                    data = json.loads(line)
+                    entries.append(LogEntry.from_dict(data))
         return entries
 
-    def load_by_date_range(
-        self,
-        start_date: datetime.date,
-        end_date: datetime.date
-    ) -> List[LogEntry]:
-        """
-        Load all log entries within a date range.
-
-        Args:
-            start_date: Start date (inclusive)
-            end_date: End date (inclusive)
-
-        Returns:
-            List of all LogEntry objects in range, sorted by timestamp
-        """
+    def read_date_range(self, start_date: datetime, end_date: datetime) -> List[LogEntry]:
+        """Read all log entries within a date range (inclusive)"""
         all_entries = []
+        current_date = start_date.date()
+        end = end_date.date()
 
-        current_date = start_date
-        while current_date <= end_date:
-            entries = self.load_by_date(current_date)
-            all_entries.extend(entries)
-            current_date = current_date.replace(day=current_date.day + 1)
+        while current_date <= end:
+            date_entries = self.read_date(datetime.combine(current_date, datetime.min.time()))
+            all_entries.extend(date_entries)
+            current_date += timedelta(days=1)
 
-        # Sort by timestamp
-        all_entries.sort(key=lambda e: e.timestamp)
+        return all_entries
 
+    def read_last_n_days(self, n_days: int) -> List[LogEntry]:
+        """Read log entries from the last N days"""
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=n_days - 1)
+        return self.read_date_range(start_date, end_date)
+
+    def read_all(self) -> List[LogEntry]:
+        """Read all log entries from all files"""
+        all_entries = []
+        for log_file in sorted(self.logs_dir.glob("log_*.jsonl")):
+            with open(log_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        data = json.loads(line)
+                        all_entries.append(LogEntry.from_dict(data))
         return all_entries
 
     def load_all(self) -> List[LogEntry]:
-        """
-        Load all log entries from all files.
+        """Alias for read_all for backward compatibility"""
+        return self.read_all()
 
-        Returns:
-            List of all LogEntry objects, sorted by timestamp
-        """
-        all_entries = []
+    def get_session_logs(self, session_id: str) -> List[LogEntry]:
+        """Get all log entries for a specific session"""
+        all_entries = self.read_all()
+        return [entry for entry in all_entries if entry.session_id == session_id]
 
-        for log_file in self.logs_dir.glob("*.jsonl"):
-            with open(log_file, 'r') as f:
-                for line in f:
-                    if line.strip():
-                        all_entries.append(LogEntry.from_json(line))
+    def count_entries(self) -> int:
+        """Count total number of log entries"""
+        count = 0
+        for log_file in self.logs_dir.glob("log_*.jsonl"):
+            with open(log_file, 'r', encoding='utf-8') as f:
+                count += sum(1 for line in f if line.strip())
+        return count
 
-        # Sort by timestamp
-        all_entries.sort(key=lambda e: e.timestamp)
+    def get_date_range(self) -> tuple[Optional[datetime], Optional[datetime]]:
+        """Get the date range of available logs"""
+        log_files = sorted(self.logs_dir.glob("log_*.jsonl"))
+        if not log_files:
+            return None, None
 
-        return all_entries
+        first_file = log_files[0]
+        last_file = log_files[-1]
 
-    def load_by_session(self, session_id: str) -> List[LogEntry]:
-        """
-        Load all log entries for a specific session.
+        # Extract dates from filenames
+        def parse_date_from_filename(path: Path) -> datetime:
+            date_str = path.stem.replace('log_', '')
+            return datetime.strptime(date_str, '%Y%m%d')
 
-        Args:
-            session_id: Session ID to filter by
+        start_date = parse_date_from_filename(first_file)
+        end_date = parse_date_from_filename(last_file)
 
-        Returns:
-            List of LogEntry objects for that session
-        """
-        all_entries = self.load_all()
-        return [e for e in all_entries if e.session_id == session_id]
+        return start_date, end_date
 
-    def get_session_ids(self) -> List[str]:
-        """
-        Get all unique session IDs.
-
-        Returns:
-            List of unique session IDs
-        """
-        all_entries = self.load_all()
-        return list(set(e.session_id for e in all_entries))
+    def clear_all(self) -> None:
+        """Delete all log files (use with caution!)"""
+        for log_file in self.logs_dir.glob("log_*.jsonl"):
+            log_file.unlink()
 
     def get_stats(self) -> dict:
-        """
-        Get storage statistics.
+        """Get statistics about stored logs"""
+        all_entries = self.read_all()
+        unique_sessions = set(entry.session_id for entry in all_entries)
 
-        Returns:
-            Dictionary with stats: total_entries, total_sessions, date_range
-        """
-        all_entries = self.load_all()
-
-        if not all_entries:
-            return {
-                "total_entries": 0,
-                "total_sessions": 0,
-                "date_range": None
-            }
-
-        timestamps = [datetime.fromisoformat(e.timestamp) for e in all_entries]
+        start_date, end_date = self.get_date_range()
 
         return {
-            "total_entries": len(all_entries),
-            "total_sessions": len(set(e.session_id for e in all_entries)),
-            "date_range": {
-                "start": min(timestamps).isoformat(),
-                "end": max(timestamps).isoformat()
-            }
+            "total_events": len(all_entries),
+            "total_sessions": len(unique_sessions),
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "log_files": len(list(self.logs_dir.glob("log_*.jsonl")))
         }

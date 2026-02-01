@@ -1,0 +1,4 @@
+# ESASS Prototype Requirements
+
+click>=8.0
+python-dateutil>=2.8

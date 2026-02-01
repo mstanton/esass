@@ -1259,11 +1259,165 @@ The "emergent self" concept raises important questions:
 
 ---
 
-## 14. Revision History
+## 14. Advanced Emergence Concepts (From Critical Reviews)
+
+### 14.1 Emergence Ecosystem Perspective
+
+ESASS must evolve beyond viewing patterns as isolated entities to understanding them as components of a **dynamic emergence ecosystem**. Patterns exist in ecological relationships:
+
+- **Symbiotic patterns**: Patterns that enhance each other's effectiveness
+- **Competitive patterns**: Patterns competing for same interaction contexts
+- **Predatory patterns**: Powerful patterns that suppress emerging competitors
+- **Niche specialization**: Different patterns dominating specific contexts
+- **Evolutionary pressure**: User behavior as selective force shaping evolution
+
+**Implementation**: Add Emergence Ecology Engine to track pattern interactions, evolutionary lineage, and ecosystem health metrics (keystone importance, niche breadth, ecosystem stability impact).
+
+### 14.2 Proto-Patterns and Fossil Reconstruction
+
+Interaction logs contain "fossil records" of nascent skills—incomplete traces showing potential. The system should:
+
+- **Identify proto-patterns**: Fragments with ≥40% completeness
+- **Reconstruct fossil patterns**: Using Markov prediction to complete partial workflows
+- **Detect catalytic events**: Interactions increasing pattern frequency >200%
+- **Test boundary cases**: Finding robustness thresholds at capability limits
+
+**Measurement**: `fossil_completeness`, `turbulence_score`, `catalytic_factor`
+
+### 14.3 Edge of Chaos Principle
+
+Most valuable skills emerge from **transitional states** operating at the boundary between order and chaos:
+
+- High entropy response structures with positive user satisfaction
+- Unusual tool combinations producing unexpected effectiveness
+- Temporal disruption triggering novel problem-solving pathways
+
+**Implementation**: Maintain Exploration Buffer preserving high-entropy interactions with positive outcomes, even if not yet meeting stability criteria.
+
+### 14.4 Multi-Scale Emergence Dynamics
+
+Intelligence emerges across multiple scales simultaneously:
+
+- **Micro**: Word choice, timing decisions
+- **Meso**: Workflow structures, interaction patterns
+- **Macro**: Domain expertise, problem-solving approaches
+
+**Cross-scale effects**:
+- Bottom-up: Micro-behaviors aggregate into meso-patterns
+- Top-down: Macro-capabilities constrain available meso-patterns
+- Scale coupling: Changes at one scale cascade to others
+
+**Validation requirement**: Skills must demonstrate consistency across all relevant scales.
+
+### 14.5 Enhanced Quality Metrics
+
+Extended pattern quality metrics beyond original specification:
+
+```typescript
+interface EnhancedQualityMetrics {
+  // Ecosystem metrics
+  keystone_importance: number;       // Critical to ecosystem stability
+  niche_breadth: number;             // Range of effective contexts
+  ecosystem_stability_impact: number;
+
+  // Evolutionary metrics
+  adaptation_velocity: number;        // Rate of change
+  phylogenetic_innovation: number;    // Novelty vs ancestors
+  extinction_resistance: number;
+
+  // Emergence metrics
+  novelty_score: number;             // Statistical rarity
+  cross_session_resonance: number;   // Cross-context recurrence
+  skill_potential_index: number;
+  crystallization_readiness: number; // Probability → skill
+  entropy_reduction_rate: number;    // Chaos resolving to order
+}
+```
+
+### 14.6 Extended Skill Candidacy Criteria
+
+Beyond original thresholds (support≥10, confidence≥0.8, stability≥7 days):
+
+**Ecosystem criteria**:
+- `min_keystone_importance`: 0.3 (priority for critical patterns)
+- `max_niche_disruption`: 0.5 (avoid excessive disruption)
+- `min_ecosystem_stability_contribution`: 0.2
+
+**Emergence criteria**:
+- `min_emergence_score`: 0.7 (breakthrough potential)
+- `min_fossil_completeness`: 0.4 (for proto-patterns)
+- `catalytic_significance`: 0.5 (impact on other patterns)
+
+**Multi-scale criteria**:
+- `min_cross_scale_coherence`: 0.7 (consistency across scales)
+- `min_emergent_property_potential`: 0.6
+
+### 14.7 New Pattern Types
+
+1. **Pattern Ecosystem Networks**: Complex interaction webs where emergent behaviors arise from pattern relationships rather than individual patterns
+
+2. **Multi-Scale Emergence Patterns**: Coordinated emergence across micro/meso/macro scales with cross-scale feedback loops
+
+3. **Proto-Patterns**: Incomplete skill precursors requiring reconstruction (fossil completeness ≥40%)
+
+4. **Anti-Patterns**: Harmful but repeatable patterns useful for error correction
+
+### 14.8 Exploration and Discovery Mechanisms
+
+**Anomaly Harvesting**: Actively seek statistically rare interactions with positive outcomes (1-in-10,000 events that succeed)
+
+**Pattern Mutation**: Intentionally vary successful patterns to test boundaries (e.g., remove one tool from 5-tool workflow)
+
+**Cross-Context Bridging**: Link patterns from unrelated domains (debugging workflows → creative writing processes)
+
+**Boundary Testing**: Probe capability limits through edge cases to define skill robustness thresholds
+
+### 14.9 Implementation Priority Guidance
+
+**High Priority** (Prototype/Phase 1):
+- Proto-pattern detection with fossil completeness metrics
+- Edge case and boundary probes
+- Basic emergence metrics (novelty, turbulence, catalytic factor)
+- Pattern interaction tracking
+
+**Medium Priority** (Phase 2):
+- Ecosystem health monitoring
+- Phylogenetic tracking (evolutionary trees)
+- Multi-scale emergence detection
+- Discovery engine for anomaly harvesting
+
+**Lower Priority** (Phase 3+):
+- Full ecosystem simulation
+- Advanced evolutionary pressure analysis
+- Niche creation and management
+- Cross-scale optimization
+
+### 14.10 Ethical Extensions
+
+**Ecosystem Ethics**:
+- New skills must enhance ecosystem health, not disrupt it
+- Protect keystone patterns critical to stability
+- Maintain pattern diversity (evolutionary health)
+- Avoid creating artificial niches solely to accommodate new skills
+
+**Exploration Safeguards**:
+- Controlled chaos: Bounded exploration to prevent uncontrolled behavior generation
+- Enhanced review for proto-pattern-derived skills
+- Validate catalytic events for non-harmful influence
+- Flag high-novelty skills (>0.9 novelty score) for mandatory human review
+
+---
+
+## 15. Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1.0-draft | 2026-01-30 | Initial specification |
+| 0.1.1-draft | 2026-02-01 | Added §14: Advanced emergence concepts from critical reviews |
+
+---
+
+**See Also**: [CRITIQUE_SYNTHESIS.md](CRITIQUE_SYNTHESIS.md) for detailed integration of three critical reviews (MM, HERMES, QWEN) into the ESASS specification.
 
 ---
 
