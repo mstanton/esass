@@ -14,7 +14,9 @@
       "Bash(python -m py_compile:*)",
       "Bash(find:*)",
       "Bash(uv run esass --help:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)"
     ]
   }
 }
