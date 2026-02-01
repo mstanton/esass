@@ -1,0 +1,33 @@
+{
+  "observation": {
+    "mode": "simulation",
+    "simulation_sessions_per_day": 20,
+    "simulation_days": 14,
+    "enabled": false
+  },
+  "storage": {
+    "data_dir": "./data",
+    "log_format": "jsonl",
+    "compression": false,
+    "max_log_age_days": 90
+  },
+  "pattern_detection": {
+    "min_support": 10,
+    "min_confidence": 0.8,
+    "min_stability_days": 7,
+    "max_gap_seconds": 300,
+    "max_sequence_length": 5,
+    "min_sequence_length": 2
+  },
+  "skill_generation": {
+    "auto_generate": true,
+    "require_validation": true,
+    "max_skills_per_pattern": 1
+  },
+  "export": {
+    "obsidian_vault": null,
+    "auto_export": false,
+    "export_format": "markdown",
+    "export_dir": "./obsidian_export"
+  }
+}
