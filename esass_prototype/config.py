@@ -50,7 +50,7 @@ class ExportConfig:
     obsidian_vault: Optional[str] = None
     auto_export: bool = False
     export_format: str = "markdown"
-    export_dir: str = "./obsidian_export"
+    export_dir: str = "C:\workspace\leo-vault"
 
 
 @dataclass
