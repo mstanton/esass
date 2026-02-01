@@ -4,9 +4,9 @@ Logger for writing observations to storage.
 Provides simple interface for capturing and persisting events.
 """
 
+import json
 from pathlib import Path
 from typing import List
-import json
 
 from esass_prototype.models import LogEntry, ObserverState
 from esass_prototype.storage.log_store import LogStore

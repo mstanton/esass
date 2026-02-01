@@ -4,10 +4,9 @@ Pattern detector using temporal sequence mining.
 Implements simplified PrefixSpan algorithm to detect recurring event sequences.
 """
 
-from collections import defaultdict, Counter
-from datetime import datetime, timedelta
-from typing import List, Dict, Tuple, Set
-from uuid import uuid4
+from collections import Counter, defaultdict
+from datetime import datetime
+from typing import Dict, List, Tuple
 
 from esass_prototype.models import LogEntry, PatternDefinition, PatternType
 

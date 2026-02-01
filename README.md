@@ -16,13 +16,17 @@ ESASS enables AI assistants to **learn from their own execution patterns** and a
 
 ```bash
 # Clone the repository
-cd ESASS
+cd ESASS/esass
 
 # Install uv (modern Python package manager)
 pip install uv
 
 # Sync dependencies and install package
 uv sync
+
+# Run Validation (Tests & Linting)
+uv run pytest
+uv run ruff check .
 
 # Verify installation
 uv run esass --help
@@ -36,6 +40,7 @@ uv run python test_pipeline.py
 ```
 
 This will:
+
 1. Generate 196 synthetic events across 35 sessions
 2. Log events to JSONL storage
 3. Detect 20+ temporal patterns
@@ -46,13 +51,14 @@ This will:
 
 This prototype implements the complete ESASS learning loop:
 
-```
+```text
 Observe → Log → Detect Patterns → Generate Skills → Export
 ```
 
 ### What It Does
 
 **Observation Simulation**: Generates realistic event sequences for 5 common Claude Code scenarios:
+
 - Git workflow (reasoning → git status → git diff → decision → commit)
 - Code analysis (glob → read files → analyze → summarize)
 - Bug fixing (grep → read → edit → test)
@@ -60,17 +66,20 @@ Observe → Log → Detect Patterns → Generate Skills → Export
 - Test writing
 
 **Pattern Detection**: Uses simplified PrefixSpan algorithm to identify:
+
 - Recurring event sequences (length 2-5)
 - Temporal patterns with quality metrics (support, confidence, stability)
 - Skill candidates meeting criteria: support ≥10, confidence ≥0.8, stability ≥7 days
 
 **Skill Generation**: Transforms validated patterns into complete skill manifests with:
+
 - Auto-generated names and descriptions
 - Trigger conditions (intent matching, event types, context)
 - Capability inference (git operations, file operations, problem analysis, etc.)
 - Implementation summaries
 
 **Obsidian Export**: Creates interconnected markdown knowledge base:
+
 - Pattern documentation with YAML frontmatter
 - Skill manifests with lineage tracking
 - Daily log summaries
@@ -78,51 +87,11 @@ Observe → Log → Detect Patterns → Generate Skills → Export
 
 ## Project Structure
 
-```
+```text
 ESASS/
 ├── esass_prototype/              # Core prototype implementation
 │   ├── __init__.py
-│   ├── config.py                 # Configuration management
-│   ├── models.py                 # Data models (LogEntry, PatternDefinition, SkillManifest)
-│   │
-│   ├── observation/              # Event observation and simulation
-│   │   ├── simulator.py          # 5 scenario event generator
-│   │   └── logger.py             # Observation logging
-│   │
-│   ├── storage/                  # Persistence layer
-│   │   ├── log_store.py          # JSONL log storage (daily files)
-│   │   ├── pattern_store.py      # Pattern JSON storage
-│   │   └── skill_store.py        # Skill manifest storage
-│   │
-│   ├── analysis/                 # Pattern detection
-│   │   └── pattern_detector.py   # Temporal sequence mining
-│   │
-│   ├── genesis/                  # Skill generation
-│   │   └── template.py           # Pattern → Skill transformation
-│   │
-│   ├── export/                   # Output formatters
-│   │   └── obsidian.py           # Markdown export with YAML
-│   │
-│   └── cli.py                    # Command-line interface
-│
-├── data/                         # Storage (auto-created, gitignored)
-│   ├── logs/                     # Daily JSONL files
-│   ├── patterns/                 # Pattern JSON files
-│   └── skills/                   # Skill manifest JSON files
-│
-├── obsidian_export/ESASS/        # Obsidian vault output
-│   ├── README.md                 # Index with statistics
-│   ├── patterns/                 # Pattern documentation
-│   └── skills/                   # Skill manifests
-│
-├── esass/                        # Full system specifications
-│   ├── esass-specification_v0.01.md
-│   ├── ARCHITECTURE.md
-│   └── README.md
-│
-├── pyproject.toml                # uv/pip package configuration
-├── test_pipeline.py              # End-to-end pipeline test
-└── README.md                     # This file
+...
 ```
 
 ## CLI Commands
@@ -212,18 +181,21 @@ min_confidence = config.pattern_detection.min_confidence
 ### Configuration Sections
 
 **Observation**:
+
 - `mode`: "simulation" or "capture"
 - `simulation_sessions_per_day`: Number of sessions to generate
 - `simulation_days`: Days to simulate
 - `enabled`: Observation active state
 
 **Storage**:
+
 - `data_dir`: Where to store logs/patterns/skills (default: "./data")
 - `log_format`: "jsonl"
 - `compression`: Enable compression (default: false)
 - `max_log_age_days`: Log retention (default: 90 days)
 
 **Pattern Detection**:
+
 - `min_support`: Minimum pattern instances (default: 10)
 - `min_confidence`: Minimum reliability 0-1 (default: 0.8)
 - `min_stability_days`: Minimum stability period (default: 7)
@@ -232,11 +204,13 @@ min_confidence = config.pattern_detection.min_confidence
 - `max_sequence_length`: Maximum events in pattern (default: 5)
 
 **Skill Generation**:
+
 - `auto_generate`: Auto-generate from candidates (default: true)
 - `require_validation`: Require validation before use (default: true)
 - `max_skills_per_pattern`: Max skills per pattern (default: 1)
 
 **Export**:
+
 - `obsidian_vault`: Path to Obsidian vault (optional)
 - `auto_export`: Auto-export on pattern/skill changes (default: false)
 - `export_format`: "markdown" (default)
@@ -309,6 +283,7 @@ The prototype uses a simple file-based storage system:
 ### Log Storage (JSONL)
 
 Organized by date for efficient querying:
+
 - `data/logs/log_20260201.jsonl` - Daily append-only files
 - One JSON object per line
 - Supports date-range queries and session filtering
@@ -326,6 +301,7 @@ session_logs = store.get_session_logs("sess-id") # Filter by session
 ### Pattern Storage (JSON)
 
 Individual files per pattern:
+
 - `data/patterns/{pattern_id}.json` - Complete pattern with metrics
 - Supports filtering by candidacy, quality thresholds
 
@@ -346,6 +322,7 @@ high_quality = store.get_high_quality(            # Filter by quality
 ### Skill Storage (JSON)
 
 Individual files per skill manifest:
+
 - `data/skills/{skill_id}.json` - Complete manifest
 - Supports filtering by validation status, pattern source
 
@@ -406,6 +383,7 @@ skills = generator.generate_from_patterns(candidates)
 ```
 
 Generated skills include:
+
 - `git_commit_skill` - Git workflow automation
 - `analysis_codebase_skill` - Code exploration
 - `bug_diagnosis_skill` - Error investigation
@@ -490,12 +468,14 @@ Sequence: reasoning → git status → git diff → decision → git add → git
 To use the exported data in Obsidian:
 
 1. **Configure Vault Path**:
+
    ```python
    # In config.py or via CLI
    config.export.obsidian_vault = "/path/to/vault/ESASS"
    ```
 
 2. **Export Data**:
+
    ```bash
    uv run esass export --vault /path/to/vault/ESASS
    ```
@@ -574,53 +554,10 @@ def _custom_capability_inference(self, pattern: PatternDefinition) -> List[str]:
 
 The prototype demonstrates core ESASS concepts:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                  ESASS Prototype Pipeline                │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐    ┌──────────────┐                  │
-│  │ EventSimulator│───▶│ObservationLogger                 │
-│  │ (5 scenarios) │    │ (JSONL logs) │                  │
-│  └──────────────┘    └───────┬──────┘                  │
-│                              │                          │
-│                              ▼                          │
-│                      ┌──────────────┐                  │
-│                      │  LogStore    │                  │
-│                      │ (daily files)│                  │
-│                      └───────┬──────┘                  │
-│                              │                          │
-│                              ▼                          │
-│                  ┌────────────────────┐                │
-│                  │TemporalPatternDetector               │
-│                  │ (sequence mining)  │                │
-│                  └────────┬───────────┘                │
-│                           │                             │
-│                           ▼                             │
-│                  ┌──────────────┐                      │
-│                  │PatternStore  │                      │
-│                  │ (JSON files) │                      │
-│                  └────────┬─────┘                      │
-│                           │                             │
-│                           ▼                             │
-│              ┌─────────────────────────┐               │
-│              │SkillTemplateGenerator   │               │
-│              │ (pattern → skill)       │               │
-│              └─────────┬───────────────┘               │
-│                        │                                │
-│                        ▼                                │
-│              ┌──────────────┐                          │
-│              │ SkillStore   │                          │
-│              │ (JSON files) │                          │
-│              └─────────┬────┘                          │
-│                        │                                │
-│                        ▼                                │
-│              ┌──────────────────┐                      │
-│              │ObsidianExporter  │                      │
-│              │ (markdown + YAML)│                      │
-│              └──────────────────┘                      │
-│                                                          │
-└─────────────────────────────────────────────────────────┘
+...
 ```
 
 ## Performance
@@ -637,27 +574,32 @@ Current prototype performance (on test data):
 The prototype demonstrates the core learning loop. The full ESASS system will add:
 
 **Phase 2 - Real Capture**:
+
 - Hook into Claude Code events
 - Capture actual reasoning, tool usage, decisions
 - Real-time logging pipeline
 
 **Phase 3 - Advanced Patterns**:
+
 - Semantic pattern detection (LDA, embeddings)
 - Structural pattern mining (graph patterns)
 - Behavioral pattern analysis
 
 **Phase 4 - Production Storage**:
+
 - Graph database for pattern relationships
 - Vector database for semantic search
 - Time-series database for log queries
 
 **Phase 5 - Skill Evolution**:
+
 - Similarity-based skill consolidation
 - Behavior chain optimization
 - Emergent capability detection
 - Automatic skill refinement
 
 **Phase 6 - Dagster Integration**:
+
 - Orchestration pipelines
 - Scheduled analysis jobs
 - Event-driven triggers
@@ -682,6 +624,7 @@ The prototype successfully demonstrates:
 - ✓ Complete learning loop execution
 
 Test results show:
+
 - 20+ patterns detected from 35 sessions
 - 16 skill candidates identified (80% success rate)
 - 100% confidence on top patterns

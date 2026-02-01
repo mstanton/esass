@@ -4,12 +4,12 @@ Core data models for ESASS prototype.
 Aligned with specification sections 3 and 4.
 """
 
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
-from typing import List, Dict, Any, Optional
-from enum import Enum
-import uuid
 import json
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class EventType(Enum):

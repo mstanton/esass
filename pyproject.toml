@@ -19,7 +19,23 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "ruff>=0.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["esass_prototype"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
+ignore = []

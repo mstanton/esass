@@ -8,28 +8,16 @@ Sensors that monitor for evolution opportunities and trigger appropriate jobs:
 - Emergence detection: Experience patterns accumulate
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from dagster import (
-    sensor,
+    DefaultSensorStatus,
     RunRequest,
-    RunConfig,
     SensorEvaluationContext,
     SkipReason,
-    DefaultSensorStatus,
-    AssetKey,
+    sensor,
 )
-
-from .resources import (
-    EvolutionConfigResource,
-    ExperienceStoreResource,
-    ChainStoreResource,
-    StateSpaceStoreResource,
-    UnificationQueueResource,
-    EvolutionMetricsResource,
-)
-
 
 # =============================================================================
 # Skill Similarity Sensor

@@ -4,12 +4,12 @@ Pattern storage using JSON format.
 Stores detected patterns with metadata and quality metrics.
 """
 
+import json
 from pathlib import Path
 from typing import List, Optional
-import json
 
+from ..config import ESASSConfig, get_data_dir
 from ..models import PatternDefinition
-from ..config import get_data_dir, ESASSConfig
 
 
 class PatternStore:

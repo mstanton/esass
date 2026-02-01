@@ -4,21 +4,22 @@ CLI interface for ESASS prototype.
 Provides commands for observation, analysis, skill generation, and export.
 """
 
-import click
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import click
+
+from esass_prototype.analysis.metrics import rank_patterns
+from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
 from esass_prototype.config import get_config, get_data_dir, get_export_dir
-from esass_prototype.observation.simulator import EventSimulator
+from esass_prototype.export.obsidian import ObsidianExporter
+from esass_prototype.genesis.candidate import SkillCandidacyEvaluator
+from esass_prototype.genesis.template import SkillTemplateGenerator
 from esass_prototype.observation.logger import ObservationLogger
+from esass_prototype.observation.simulator import EventSimulator
 from esass_prototype.storage.log_store import LogStore
 from esass_prototype.storage.pattern_store import PatternStore
 from esass_prototype.storage.skill_store import SkillStore
-from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
-from esass_prototype.analysis.metrics import rank_patterns
-from esass_prototype.genesis.candidate import SkillCandidacyEvaluator
-from esass_prototype.genesis.template import SkillTemplateGenerator
-from esass_prototype.export.obsidian import ObsidianExporter
 
 
 @click.group()
@@ -63,7 +64,7 @@ def observe_start(sessions, days):
 
     # Show stats
     stats = logger.get_stats()
-    click.echo(f"\n[OK] Observation started")
+    click.echo("\n[OK] Observation started")
     click.echo(f"  Total events: {stats['total_events']}")
     click.echo(f"  Total sessions: {stats['total_sessions']}")
 
@@ -99,7 +100,7 @@ def analyze(days):
         click.echo(f"   Loaded logs from last {days} days")
     else:
         logs = log_store.load_all()
-        click.echo(f"   Loaded all logs")
+        click.echo("   Loaded all logs")
 
     click.echo(f"   Processing {len(logs)} events...")
 
@@ -122,12 +123,12 @@ def analyze(days):
     # Report
     candidates = [p for p in patterns if p.skill_candidate]
 
-    click.echo(f"\n[OK] Analysis complete")
+    click.echo("\n[OK] Analysis complete")
     click.echo(f"  Total patterns detected: {len(patterns)}")
     click.echo(f"  Skill candidates: {len(candidates)}")
 
     if patterns:
-        click.echo(f"\nTop 5 patterns by support:")
+        click.echo("\nTop 5 patterns by support:")
         for i, pattern in enumerate(patterns[:5], 1):
             status = "[OK]" if pattern.skill_candidate else "•"
             click.echo(f"  {status} {i}. {pattern.description}")
@@ -208,7 +209,7 @@ def export(vault):
     exporter = ObsidianExporter(vault_path)
     exporter.export_all(logs, patterns, skills)
 
-    click.echo(f"\n[OK] Export complete")
+    click.echo("\n[OK] Export complete")
     click.echo(f"  Location: {vault_path / 'ESASS'}")
 
 
@@ -274,7 +275,7 @@ def stats():
     if log_stats.get('date_range'):
         click.echo(f"  Date range: {log_stats['date_range']['start'][:10]} to {log_stats['date_range']['end'][:10]}")
 
-    click.echo(f"\nPatterns:")
+    click.echo("\nPatterns:")
     click.echo(f"  Total patterns: {pattern_stats.get('total_patterns', 0)}")
     click.echo(f"  Skill candidates: {pattern_stats.get('skill_candidates', 0)}")
 
@@ -282,11 +283,11 @@ def stats():
         click.echo(f"  Avg support: {pattern_stats['avg_support']:.1f}")
         click.echo(f"  Avg confidence: {pattern_stats['avg_confidence']:.1%}")
 
-    click.echo(f"\nSkills:")
+    click.echo("\nSkills:")
     click.echo(f"  Total skills: {skill_stats.get('total_skills', 0)}")
 
     if skill_stats.get('by_status'):
-        click.echo(f"  By status:")
+        click.echo("  By status:")
         for status, count in skill_stats['by_status'].items():
             click.echo(f"    {status}: {count}")
 

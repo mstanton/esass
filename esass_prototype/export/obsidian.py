@@ -4,9 +4,9 @@ Obsidian exporter - exports ESASS data to Obsidian vault as markdown files.
 Formats data with YAML frontmatter for Obsidian integration.
 """
 
-from pathlib import Path
+from collections import Counter, defaultdict
 from datetime import datetime
-from collections import defaultdict, Counter
+from pathlib import Path
 from typing import List
 
 from esass_prototype.models import LogEntry, PatternDefinition, SkillManifest

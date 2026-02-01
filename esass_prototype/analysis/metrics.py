@@ -5,6 +5,7 @@ Provides functions for computing various pattern quality metrics.
 """
 
 from typing import List
+
 from esass_prototype.models import PatternDefinition, PatternQualityMetrics
 
 

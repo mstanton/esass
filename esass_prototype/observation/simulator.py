@@ -5,17 +5,16 @@ Simulates 5 common Claude Code interaction scenarios to demonstrate
 pattern detection and skill generation capabilities.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
-from uuid import uuid4
 import random
+from datetime import datetime, timedelta
+from typing import Dict, List
+from uuid import uuid4
 
 from esass_prototype.models import (
     LogEntry,
-    EventType,
+    create_decision_event,
     create_reasoning_event,
     create_tool_usage_event,
-    create_decision_event
 )
 
 
