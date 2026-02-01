@@ -37,7 +37,8 @@ uv run esass --help
 ```
 
 Expected output:
-```
+
+```text
 Usage: esass [OPTIONS] COMMAND [ARGS]...
 
   ESASS - Emergent Self-Adaptive Skill System
@@ -62,7 +63,7 @@ uv run python test_pipeline.py
 
 You should see output like:
 
-```
+```text
 ============================================================
 ESASS PROTOTYPE - FULL PIPELINE TEST
 ============================================================
@@ -130,6 +131,7 @@ cat data/patterns/pattern_*.json | head -20
 ```
 
 Example pattern:
+
 ```json
 {
   "pattern_id": "abc123...",
@@ -160,6 +162,7 @@ cat data/skills/git_commit_skill.json
 ```
 
 Example skill:
+
 ```json
 {
   "skill_id": "def456...",
@@ -190,7 +193,8 @@ uv run esass stats
 ```
 
 Output:
-```
+
+```text
 ESASS System Statistics
 
 Logs:
@@ -247,7 +251,7 @@ uv run esass export --vault C:\Users\YourName\Documents\ObsidianVault\ESASS
 
 ### Install Obsidian
 
-1. Download from https://obsidian.md/
+1. Download from <https://obsidian.md/>
 2. Install and create a new vault or use existing one
 
 ### Configure ESASS Export
@@ -280,6 +284,7 @@ uv run esass export
 - **logs/**: Daily log summaries
 
 Use Obsidian's features:
+
 - **Internal links**: Click [[pattern_abc123]] to jump to pattern
 - **Graph view**: Visualize relationships between patterns and skills
 - **Search**: Find patterns by tags, support, or confidence
@@ -330,6 +335,7 @@ entries = simulator.generate_multiple_sessions(count=100, days=30)
 ```
 
 Then run:
+
 ```bash
 uv run python test_pipeline.py
 ```
@@ -400,11 +406,13 @@ uv run python -c "import esass_prototype; print('OK')"
 ### No patterns detected
 
 Possible causes:
+
 - Not enough events (generate more sessions)
 - Thresholds too high (lower min_support, min_confidence)
 - Events too random (use lower seed value for more consistent scenarios)
 
 Solution:
+
 ```bash
 # Generate more data with more sessions
 uv run esass pipeline --sessions 100 --days 14
@@ -432,6 +440,7 @@ uv run python test_pipeline.py
 ### Explore the Code
 
 Key files to understand:
+
 1. `esass_prototype/models.py` - Data models
 2. `esass_prototype/observation/simulator.py` - Event generation
 3. `esass_prototype/analysis/pattern_detector.py` - Pattern detection
@@ -447,6 +456,7 @@ Key files to understand:
 ### Extend the Prototype
 
 Add new features:
+
 - New event scenarios
 - Additional pattern detection algorithms
 - Custom skill templates
@@ -455,6 +465,7 @@ Add new features:
 ### Integrate with Real System
 
 The next phase would:
+
 1. Replace simulation with real event capture
 2. Hook into Claude Code events
 3. Capture actual reasoning, tool usage, decisions
@@ -463,6 +474,7 @@ The next phase would:
 ## Support
 
 For questions or issues:
+
 - Check the main README.md
 - Review the specification in esass/esass-specification_v0.01.md
 - Examine the test_pipeline.py for usage examples
