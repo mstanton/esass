@@ -57,9 +57,14 @@ class SkillStore:
         """Load all skills from storage"""
         skills = []
         for skill_file in sorted(self.skills_dir.glob("*.json")):
-            with open(skill_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                skills.append(SkillManifest.from_dict(data))
+            try:
+                with open(skill_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    skills.append(SkillManifest.from_dict(data))
+            except (json.JSONDecodeError, ValueError) as e:
+                # Skip malformed or empty files
+                print(f"Warning: Skipping malformed file {skill_file.name}: {e}")
+                continue
         return skills
 
     def load_by_status(self, status: str) -> List[SkillManifest]:
@@ -154,7 +159,11 @@ class SkillStore:
 
         return {
             "total_skills": len(skills),
-            **status_counts,
+            "by_status": status_counts,
             "unique_capabilities": len(all_capabilities),
             "capabilities": sorted(all_capabilities)
         }
+
+    def get_stats(self) -> dict:
+        """Get statistics about stored skills (alias for export_summary)"""
+        return self.export_summary()

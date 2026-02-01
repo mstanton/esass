@@ -112,6 +112,28 @@ class PatternDefinition:
 
 
 @dataclass
+class PatternQualityMetrics:
+    """
+    Quality metrics for pattern evaluation.
+
+    Used in pattern ranking and skill candidacy evaluation.
+    """
+    support: int
+    confidence: float
+    stability_days: int
+    lift: float = 1.0
+    coherence: float = 0.0
+    distinctiveness: float = 0.0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'PatternQualityMetrics':
+        return cls(**data)
+
+
+@dataclass
 class TriggerCondition:
     """Trigger condition for skill activation (§3.1.3)"""
     trigger_type: str  # "intent_match", "event_type", "context_match"
@@ -163,9 +185,32 @@ class SkillManifest:
     @classmethod
     def from_dict(cls, data: dict) -> 'SkillManifest':
         """Create from dictionary"""
-        triggers_data = data.pop('triggers')
-        triggers = [TriggerCondition.from_dict(t) for t in triggers_data]
-        return cls(triggers=triggers, **data)
+        data_copy = data.copy()
+        triggers_data = data_copy.pop('triggers', [])
+
+        # Handle both string triggers and TriggerCondition objects
+        triggers = []
+        for t in triggers_data:
+            if isinstance(t, str):
+                # Parse string trigger format: "type:pattern"
+                parts = t.split(':', 1)
+                if len(parts) == 2:
+                    triggers.append(TriggerCondition(
+                        trigger_type=parts[0],
+                        pattern=parts[1]
+                    ))
+                else:
+                    # Fallback for malformed strings
+                    triggers.append(TriggerCondition(
+                        trigger_type="unknown",
+                        pattern=t
+                    ))
+            elif isinstance(t, dict):
+                triggers.append(TriggerCondition.from_dict(t))
+            else:
+                triggers.append(t)
+
+        return cls(triggers=triggers, **data_copy)
 
     @classmethod
     def create(cls, name: str, description: str, source_pattern_ids: List[str],

@@ -36,7 +36,7 @@ def observe_start(sessions, days):
     config = get_config()
     data_dir = get_data_dir(config)
 
-    click.echo("🔍 Starting ESASS observation...")
+    click.echo("[*] Starting ESASS observation...")
     click.echo(f"   Simulating {sessions} sessions/day over {days} days")
 
     # Initialize components
@@ -58,12 +58,12 @@ def observe_start(sessions, days):
         bar.update(sessions * days)
 
     # Log entries
-    click.echo(f"\n💾 Logging {len(entries)} events...")
+    click.echo(f"\n[*] Logging {len(entries)} events...")
     logger.log_many(entries)
 
     # Show stats
     stats = logger.get_stats()
-    click.echo(f"\n✓ Observation started")
+    click.echo(f"\n[OK] Observation started")
     click.echo(f"  Total events: {stats['total_events']}")
     click.echo(f"  Total sessions: {stats['total_sessions']}")
 
@@ -77,7 +77,7 @@ def observe_stop():
     logger = ObservationLogger(data_dir)
     logger.stop_observation()
 
-    click.echo("✓ Observation stopped")
+    click.echo("[OK] Observation stopped")
 
 
 @esass.command("analyze")
@@ -87,7 +87,7 @@ def analyze(days):
     config = get_config()
     data_dir = get_data_dir(config)
 
-    click.echo("🔍 Analyzing observation logs...")
+    click.echo("[*] Analyzing observation logs...")
 
     # Load logs
     log_store = LogStore(data_dir)
@@ -122,14 +122,14 @@ def analyze(days):
     # Report
     candidates = [p for p in patterns if p.skill_candidate]
 
-    click.echo(f"\n✓ Analysis complete")
+    click.echo(f"\n[OK] Analysis complete")
     click.echo(f"  Total patterns detected: {len(patterns)}")
     click.echo(f"  Skill candidates: {len(candidates)}")
 
     if patterns:
         click.echo(f"\nTop 5 patterns by support:")
         for i, pattern in enumerate(patterns[:5], 1):
-            status = "✓" if pattern.skill_candidate else "•"
+            status = "[OK]" if pattern.skill_candidate else "•"
             click.echo(f"  {status} {i}. {pattern.description}")
             click.echo(f"     Support: {pattern.support}, Confidence: {pattern.confidence:.0%}, Stability: {pattern.stability_days}d")
 
@@ -140,7 +140,7 @@ def generate_skills():
     config = get_config()
     data_dir = get_data_dir(config)
 
-    click.echo("⚡ Generating skills from patterns...")
+    click.echo("[*] Generating skills from patterns...")
 
     # Load patterns
     pattern_store = PatternStore(data_dir)
@@ -160,7 +160,7 @@ def generate_skills():
     click.echo(f"   Found {len(candidates)} skill candidates")
 
     if not candidates:
-        click.echo("\n⚠ No patterns meet skill candidacy criteria")
+        click.echo("\nWARNING: No patterns meet skill candidacy criteria")
         return
 
     # Generate skills
@@ -171,7 +171,7 @@ def generate_skills():
     skill_store = SkillStore(data_dir)
     skill_store.save_many(skills)
 
-    click.echo(f"\n✓ Generated {len(skills)} skills")
+    click.echo(f"\n[OK] Generated {len(skills)} skills")
 
     for i, skill in enumerate(skills[:5], 1):
         click.echo(f"  {i}. {skill.name}")
@@ -191,7 +191,7 @@ def export(vault):
 
     vault_path = Path(vault)
 
-    click.echo(f"📤 Exporting to Obsidian vault: {vault_path}")
+    click.echo(f"[*] Exporting to Obsidian vault: {vault_path}")
 
     # Load all data
     log_store = LogStore(data_dir)
@@ -208,7 +208,7 @@ def export(vault):
     exporter = ObsidianExporter(vault_path)
     exporter.export_all(logs, patterns, skills)
 
-    click.echo(f"\n✓ Export complete")
+    click.echo(f"\n[OK] Export complete")
     click.echo(f"  Location: {vault_path / 'ESASS'}")
 
 
@@ -217,8 +217,8 @@ def export(vault):
 @click.option('--days', default=14, help='Days of history to generate')
 @click.option('--vault', type=click.Path(), help='Path to Obsidian vault')
 def pipeline(sessions, days, vault):
-    """Run full pipeline: observe → analyze → generate → export"""
-    click.echo("🚀 Running full ESASS pipeline\n")
+    """Run full pipeline: observe -> analyze -> generate -> export"""
+    click.echo("==> Running full ESASS pipeline\n")
 
     # Step 1: Observe
     click.echo("=" * 60)
@@ -246,7 +246,7 @@ def pipeline(sessions, days, vault):
     ctx.invoke(export, vault=vault)
 
     click.echo("\n" + "=" * 60)
-    click.echo("✅ PIPELINE COMPLETE")
+    click.echo("[OK] PIPELINE COMPLETE")
     click.echo("=" * 60)
 
 
@@ -265,7 +265,7 @@ def stats():
     pattern_stats = pattern_store.get_stats()
     skill_stats = skill_store.get_stats()
 
-    click.echo("📊 ESASS Statistics\n")
+    click.echo("=== ESASS Statistics\n")
 
     click.echo("Observation Logs:")
     click.echo(f"  Total entries: {log_stats.get('total_entries', 0)}")

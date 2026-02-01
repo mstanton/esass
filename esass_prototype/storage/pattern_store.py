@@ -57,9 +57,14 @@ class PatternStore:
         """Load all patterns from storage"""
         patterns = []
         for pattern_file in sorted(self.patterns_dir.glob("*.json")):
-            with open(pattern_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                patterns.append(PatternDefinition.from_dict(data))
+            try:
+                with open(pattern_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    patterns.append(PatternDefinition.from_dict(data))
+            except (json.JSONDecodeError, ValueError) as e:
+                # Skip malformed or empty files
+                print(f"Warning: Skipping malformed file {pattern_file.name}: {e}")
+                continue
         return patterns
 
     def load_candidates(self) -> List[PatternDefinition]:
@@ -103,9 +108,9 @@ class PatternStore:
         all_patterns = self.load_all()
         return [
             p for p in all_patterns
-            if (p.metrics.support >= min_support and
-                p.metrics.confidence >= min_confidence and
-                p.metrics.stability_days >= min_stability_days)
+            if (p.support >= min_support and
+                p.confidence >= min_confidence and
+                p.stability_days >= min_stability_days)
         ]
 
     def clear_all(self) -> None:
@@ -129,8 +134,12 @@ class PatternStore:
         return {
             "total_patterns": len(patterns),
             "skill_candidates": len(candidates),
-            "avg_support": sum(p.metrics.support for p in patterns) / len(patterns),
-            "avg_confidence": sum(p.metrics.confidence for p in patterns) / len(patterns),
-            "avg_stability_days": sum(p.metrics.stability_days for p in patterns) / len(patterns),
+            "avg_support": sum(p.support for p in patterns) / len(patterns),
+            "avg_confidence": sum(p.confidence for p in patterns) / len(patterns),
+            "avg_stability_days": sum(p.stability_days for p in patterns) / len(patterns),
             "unique_sequences": len(set(tuple(p.sequence) for p in patterns))
         }
+
+    def get_stats(self) -> dict:
+        """Get statistics about stored patterns (alias for export_summary)"""
+        return self.export_summary()

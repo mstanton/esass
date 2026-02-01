@@ -15,8 +15,8 @@ esass = "esass_prototype.cli:esass"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]

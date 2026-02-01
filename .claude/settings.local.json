@@ -10,7 +10,11 @@
       "Bash(sh)",
       "Bash(python setup_files.py:*)",
       "Bash(uv sync:*)",
-      "Bash(uv run python:*)"
+      "Bash(uv run python:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(find:*)",
+      "Bash(uv run esass --help:*)",
+      "Bash(uv run:*)"
     ]
   }
 }
