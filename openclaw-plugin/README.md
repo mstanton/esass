@@ -4,15 +4,15 @@
 
 A meta-cognitive system that enables AI agents to learn from their own execution patterns and automatically develop, publish, and evolve new capabilities.
 
-```
+```text
     ┌──────────────┐
     │   ClawHub    │◀──────────────────────────────┐
-    │   Registry   │                               │
-    └──────┬───────┘                               │
-           │ Install                               │ Publish
-           ▼                                       │
-    ┌──────────────┐                               │
-    │   OpenClaw   │       ┌──────────────┐       │
+    │   Registry   │                                │
+    └──────┬───────┘                                │
+           │ Install                                │ Publish
+           ▼                                        │
+    ┌──────────────┐                                │
+    │   OpenClaw   │       ┌──────────────┐         │
     │    Gateway   │──────▶│    ESASS     │───────┘
     │ (Agent Loop) │Events │ Observation  │ Skills
     └──────────────┘       │ + Genesis    │
@@ -37,7 +37,7 @@ A meta-cognitive system that enables AI agents to learn from their own execution
 ## 📚 Documentation
 
 | Document | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | [**ESASS_OPENCLAW_INTEGRATION.md**](ESASS_OPENCLAW_INTEGRATION.md) | Architecture overview and integration design |
 | [**IMPLEMENTATION_GUIDE.md**](IMPLEMENTATION_GUIDE.md) | Complete code implementation with examples |
 | [**EXPLORABLE_DOCUMENTATION.md**](EXPLORABLE_DOCUMENTATION.md) | Visual deep dives into each component |
@@ -115,7 +115,7 @@ asyncio.run(main())
 
 ### The Recursive Loop
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    RECURSIVE LEARNING CYCLE                  │
 ├─────────────────────────────────────────────────────────────┤
@@ -152,7 +152,7 @@ asyncio.run(main())
 ### Component Overview
 
 | Component | Purpose | Key Files |
-|-----------|---------|-----------|
+| ----------- | --------- | ----------- |
 | **OpenClaw Bridge** | Capture events from agent loop | `src/bridge/openclaw_hooks.py` |
 | **ESASS Probes** | Extract structured observations | `esass/probes/*.py` |
 | **Pattern Detector** | Mine recurring sequences | `esass_prototype/analysis/` |
@@ -167,7 +167,7 @@ asyncio.run(main())
 ### Loop Health Indicators
 
 | Metric | Target | Description |
-|--------|--------|-------------|
+| -------- | -------- | ------------- |
 | Events/Day | 1000+ | Raw observation volume |
 | Pattern Detection Rate | 5+/week | New patterns discovered |
 | Skill Crystallization Rate | 2+/week | Skills generated |
@@ -178,7 +178,7 @@ asyncio.run(main())
 ### Safety Thresholds
 
 | Safeguard | Default | Description |
-|-----------|---------|-------------|
+| ----------- | --------- | ------------- |
 | Min Confidence | 0.85 | Pattern reliability |
 | Min Support | 15 | Observation count |
 | Min Stability | 7 days | Pattern persistence |
@@ -246,7 +246,7 @@ config = LoopConfig(
 
 ## 📁 Project Structure
 
-```
+```text
 esass-openclaw-integration/
 ├── README.md                          # This file
 ├── ESASS_OPENCLAW_INTEGRATION.md      # Architecture overview
@@ -318,7 +318,7 @@ Skills exist in relationships:
 ## 🔗 Related Projects
 
 | Project | Description | Link |
-|---------|-------------|------|
+| --------- | ------------- | ------ |
 | **ESASS** | Emergent Self-Adaptive Skill System | [github.com/mstanton/esass](https://github.com/mstanton/esass) |
 | **OpenClaw** | AI Agent Gateway | [docs.openclaw.ai](https://docs.openclaw.ai) |
 | **ClawHub** | Skill Registry | [clawhub.com](https://clawhub.com) |
@@ -339,4 +339,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-*"Skills aren't programmed—they emerge from the residue of intelligent behavior, crystallize through observation, and evolve through usage."*
+> "Skills aren't programmed—they emerge from the residue of intelligent behavior, crystallize through observation, and evolve through usage."
