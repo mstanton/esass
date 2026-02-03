@@ -35,6 +35,7 @@ python -m esass_prototype.cli --help
 ```
 
 **Note**: If using `uv` (modern Python package manager):
+
 ```bash
 pip install uv
 uv sync
@@ -129,30 +130,30 @@ The probe system provides 8 specialized observers (3 core + 5 enhanced):
 
 #### Enhanced Meta-Cognitive Probes (NEW in v0.2.0)
 
-4. **ErrorRecoveryProbe** (`esass/probes/error_recovery_probe.py`)
+1. **ErrorRecoveryProbe** (`esass/probes/error_recovery_probe.py`)
    - Detects error → fix → retry patterns
    - Tracks recovery strategies and success rates
    - Monitors time-to-recovery metrics
 
-5. **StrategyShiftProbe** (`esass/probes/strategy_shift_probe.py`)
+2. **StrategyShiftProbe** (`esass/probes/strategy_shift_probe.py`)
    - Captures pivot points in problem-solving
    - Tracks approach changes (analytical → pragmatic)
    - Measures strategy effectiveness
    - **Test result**: 1 observation, 4 events generated
 
-6. **CalibrationProbe** (`esass/probes/calibration_probe.py`)
+3. **CalibrationProbe** (`esass/probes/calibration_probe.py`)
    - Compares predictions vs actual outcomes
    - Tracks confidence calibration over time
    - Enables self-improvement through feedback
    - **Test result**: 2 observations, 12 events generated
 
-7. **InsightProbe** (`esass/probes/insight_probe.py`)
+4. **InsightProbe** (`esass/probes/insight_probe.py`)
    - Detects "aha moments" and breakthroughs
    - Captures high-confidence realizations (>0.7)
    - Tracks learning and pattern recognition
    - **Test result**: 1 observation, 4 events generated
 
-8. **ScopeExpansionProbe** (`esass/probes/scope_expansion_probe.py`)
+5. **ScopeExpansionProbe** (`esass/probes/scope_expansion_probe.py`)
    - Identifies complexity surprises
    - Tracks scope creep and underestimation
    - Monitors task complexity evolution
@@ -178,13 +179,16 @@ Run the integration examples to see the probe system in action:
 
 #### Claude Code Example
 
-Run the integration example to see the probe system in action:
+Run the integration examples to see the probe system in action:
+
+#### Claude Code Example
 
 ```bash
 python -m examples.claude_code_integration
 ```
 
 Expected output:
+
 ```text
 ======================================================================
 ESASS Claude Code Integration Example
@@ -221,6 +225,7 @@ Data directory: data_example
 ```
 
 **What gets captured:**
+
 - 57 total events (45 unique) across 8 event types
 - Causality chains linking tool calls to outcomes
 - Semantic tags auto-extracted from parameters
@@ -303,6 +308,7 @@ pytest tests/test_probes.py::TestToolCallProbe -v
 ```
 
 **Test Results Summary**:
+
 ```
 ============================= test session starts =============================
 platform win32 -- Python 3.9.13, pytest-8.4.2, pluggy-1.6.0
@@ -314,6 +320,7 @@ tests\test_probes.py ...........................                         [100%]
 ```
 
 **Detailed test analysis**: See [TEST_RESULTS.md](TEST_RESULTS.md) for:
+
 - Complete test breakdown by component
 - Event capture examples
 - Performance metrics
