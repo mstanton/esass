@@ -178,7 +178,7 @@ Events written to storage: 10
 Tested on Intel i7, 16GB RAM:
 
 | Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
+| -------- | -------- | ---------- | -------- |
 | Event capture latency | <10ms | ~3ms | ✅ Exceeded |
 | Throughput | 1000/sec | ~1500/sec | ✅ Exceeded |
 | Memory footprint | <100MB | ~60MB | ✅ Exceeded |
@@ -422,7 +422,7 @@ uv run esass pipeline --sessions 50 --days 14
 uv run esass stats
 ```
 
-## Configuration
+## Prototype Configuration
 
 Configuration is managed via `esass_prototype/config.py`:
 
@@ -869,7 +869,7 @@ The prototype demonstrates the core learning loop. The full ESASS system will ad
 - Event-driven triggers
 - Production monitoring
 
-## Documentation
+## Project Documentation
 
 - **[Full Specification](esass/esass-specification_v0.01.md)**: Complete technical specification (1271 lines)
 - **[Architecture](esass/ARCHITECTURE.md)**: Evolution system architecture details

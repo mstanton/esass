@@ -631,7 +631,7 @@ export ESASS_FLUSH_INTERVAL=5.0
 The probe system has been tested and exceeds all targets:
 
 | Metric | Target | Achieved |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | Event capture latency | <10ms | ~3ms ✅ |
 | Throughput | 1000/sec | ~1500/sec ✅ |
 | Memory footprint | <100MB | ~60MB ✅ |
