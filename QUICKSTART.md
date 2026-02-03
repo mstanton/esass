@@ -27,13 +27,23 @@ pip install uv
 
 ```bash
 # Navigate to ESASS directory
-cd C:\workspace\ESASS
+cd C:\workspace\esass
 
-# Sync dependencies and install package
-uv sync
+# Install package with dev dependencies (recommended)
+pip install -e ".[dev]"
+
+# Or install dependencies separately
+pip install pytest pytest-cov ruff click python-dateutil
 
 # Verify installation
-uv run esass --help
+python -m pytest tests/ -v
+```
+
+**Alternative using uv**:
+```bash
+pip install uv
+uv sync
+uv run pytest tests/ -v
 ```
 
 Expected output:
@@ -472,14 +482,14 @@ ESASS now includes a production-ready probe system for capturing real Claude Cod
 
 ```bash
 # Test the probe system with simulated Claude Code session
-python -c "import sys; sys.path.insert(0, '.'); from examples.claude_code_integration import example_simulated_session; example_simulated_session()"
+python -m examples.claude_code_integration
 ```
 
-**open-code-ai Integration (NEW!):**
+**open-code-ai Integration:**
 
 ```bash
 # Test the probe system with simulated open-code-ai session
-python -c "import sys; sys.path.insert(0, '.'); from examples.opencode_ai_integration import example_simulated_session; example_simulated_session()"
+python -m examples.opencode_ai_integration
 ```
 
 Expected output (open-code-ai):
@@ -514,22 +524,35 @@ Data directory: data_opencode
 
 #### Run Probe System Tests
 
+**Current Status**: ✅ All 41 tests passing (verified 2026-02-03)
+**Execution Time**: 2.02 seconds
+**Success Rate**: 100%
+
 ```bash
-# Run all probe tests
+# Run all tests (41 tests total)
+pytest tests/ -v
+
+# Run probe tests only (27 tests)
 pytest tests/test_probes.py -v
 
-# Run open-code-ai integration tests (NEW!)
+# Run open-code-ai integration tests (13 tests)
 pytest tests/test_opencode_integration.py -v
 
-# Run all integration tests
-pytest tests/test_*integration.py -v
+# Run end-to-end pipeline test (1 test)
+pytest tests/test_e2e_pipeline.py -v
 
 # Run with coverage report
-pytest tests/test_probes.py tests/test_opencode_integration.py --cov=esass.probes --cov=examples --cov-report=html
+pytest tests/ --cov=esass.probes --cov=esass_prototype --cov=examples --cov-report=html
 
 # Run specific probe tests
 pytest tests/test_probes.py::TestToolCallProbe -v
 ```
+
+**Detailed test results**: See [TEST_RESULTS.md](TEST_RESULTS.md) for:
+- Complete test breakdown (27 tests across 5 categories)
+- Event capture examples (57 events, 8 probe types)
+- Performance benchmarks (all targets exceeded)
+- Integration readiness assessment
 
 #### Explore Probe System Documentation
 

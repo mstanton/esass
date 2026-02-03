@@ -50,7 +50,11 @@ class LogEntry:
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
-        return asdict(self)
+        data = asdict(self)
+        # Ensure timestamp is a string for JSON serialization
+        if isinstance(data['timestamp'], datetime):
+            data['timestamp'] = data['timestamp'].isoformat()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> 'LogEntry':
