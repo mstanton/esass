@@ -30,9 +30,18 @@ class LogStore:
         filename = f"log_{date.strftime('%Y%m%d')}.jsonl"
         return self.logs_dir / filename
 
+    def _parse_timestamp(self, timestamp) -> datetime:
+        """Parse timestamp from string or datetime object"""
+        if isinstance(timestamp, datetime):
+            return timestamp
+        elif isinstance(timestamp, str):
+            return datetime.fromisoformat(timestamp)
+        else:
+            raise ValueError(f"Invalid timestamp type: {type(timestamp)}")
+
     def append(self, entry: LogEntry) -> None:
         """Append a log entry to the appropriate daily file"""
-        timestamp = datetime.fromisoformat(entry.timestamp)
+        timestamp = self._parse_timestamp(entry.timestamp)
         log_path = self._get_log_path(timestamp)
 
         with open(log_path, 'a', encoding='utf-8') as f:
@@ -43,7 +52,7 @@ class LogStore:
         # Group by date
         entries_by_date = {}
         for entry in entries:
-            timestamp = datetime.fromisoformat(entry.timestamp)
+            timestamp = self._parse_timestamp(entry.timestamp)
             date_key = timestamp.date()
             if date_key not in entries_by_date:
                 entries_by_date[date_key] = []
