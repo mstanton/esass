@@ -24,7 +24,6 @@ from esass.probes.registry import ProbeRegistry
 from esass.probes.tool_probe import ToolCallProbe
 from esass_prototype.models import LogEntry
 
-
 # =============================================================================
 # Base Probe Tests
 # =============================================================================
@@ -487,6 +486,12 @@ class TestConfiguration:
         config.tool_probe.enabled = True
         config.reasoning_probe.enabled = True
         config.decision_probe.enabled = False
+        # Disable enhanced probes
+        config.error_recovery_probe.enabled = False
+        config.strategy_shift_probe.enabled = False
+        config.calibration_probe.enabled = False
+        config.insight_probe.enabled = False
+        config.scope_expansion_probe.enabled = False
 
         probes = create_default_probes(config)
 
