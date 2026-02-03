@@ -4,6 +4,8 @@ A meta-cognitive architecture that enables AI skills to achieve operational self
 
 **Current Status**: Production-ready probe system + OpenClaw recursive learning loop integration
 
+**Latest**: v0.2.1 (2026-02-03) - All tests passing ✅ | Integration verified ✅ | [View Changelog](CHANGELOG.md)
+
 ## What is ESASS?
 
 ESASS enables AI assistants to **learn from their own execution patterns** and automatically develop new capabilities. Rather than requiring every skill to be explicitly programmed, ESASS observes how problems are solved, identifies recurring patterns, and crystallizes those patterns into reusable, composable skills.
@@ -16,20 +18,27 @@ ESASS enables AI assistants to **learn from their own execution patterns** and a
 
 ```bash
 # Clone the repository
-cd ESASS/esass
+cd esass
 
-# Install uv (modern Python package manager)
-pip install uv
+# Install package with development dependencies
+pip install -e ".[dev]"  # or: python -m pip install -e ".[dev]"
 
-# Sync dependencies and install package
-uv sync
+# Alternatively, install dependencies separately
+pip install pytest pytest-cov ruff
 
 # Run Validation (Tests & Linting)
-uv run pytest
-uv run ruff check .
+pytest tests/ -v
+ruff check .
 
 # Verify installation
-uv run esass --help
+python -m esass_prototype.cli --help
+```
+
+**Note**: If using `uv` (modern Python package manager):
+```bash
+pip install uv
+uv sync
+uv run pytest
 ```
 
 ### Run the Demo Pipeline
@@ -85,11 +94,11 @@ Observe → Log → Detect Patterns → Generate Skills → Export
 - Daily log summaries
 - Navigation index with statistics
 
-## Real-Time Event Capture (NEW!)
+## Real-Time Event Capture
 
-**Status**: ✅ Production-ready probe system implemented
+**Status**: ✅ Production-ready probe system implemented and verified working
 
-ESASS now includes a complete event capture infrastructure for observing real Claude Code execution in real-time.
+ESASS includes a complete event capture infrastructure for observing real Claude Code execution in real-time. The system has been fully tested and successfully captures events with all 41 tests passing.
 
 ### Probe System Components
 
@@ -133,14 +142,37 @@ Run the integration examples to see the probe system in action:
 
 #### Claude Code Example
 
-Run the integration examples to see the probe system in action:
-
-#### Claude Code Example
+Run the integration example to see the probe system in action:
 
 ```bash
-python -c "import sys; sys.path.insert(0, '.'); \
-from examples.claude_code_integration import example_simulated_session; \
-example_simulated_session()"
+python -m examples.claude_code_integration
+```
+
+Expected output:
+```text
+======================================================================
+ESASS Claude Code Integration Example
+======================================================================
+
+[1] Initializing ESASS integration...
+
+[2] Starting simulated Claude Code session: example-session-001
+----------------------------------------------------------------------
+
+User: Can you read src/main.py?
+Claude: I'll read that file for you.
+[OK] Tool: Read src/main.py [SUCCESS]
+[OK] Thinking: Analyzed file content
+[OK] Response: Explained file contents
+
+[4] ESASS Statistics:
+----------------------------------------------------------------------
+Events received: 7
+Log entries generated: 12
+Active probes: 8
+
+Events written to storage: 12
+Data directory: data_example
 ```
 
 #### open-code-ai Example (NEW!)
@@ -190,20 +222,25 @@ Tested on Intel i7, 16GB RAM:
 
 ### Testing
 
+**Current Status**: ✅ All 41 tests passing
+
 Run comprehensive probe system tests:
 
 ```bash
+# Run all tests (41 tests total)
+pytest tests/ -v
+
 # All probe tests (27 tests, ~85% coverage)
 pytest tests/test_probes.py -v
 
-# open-code-ai integration tests (13 tests) (NEW!)
+# open-code-ai integration tests (13 tests)
 pytest tests/test_opencode_integration.py -v
 
-# All integration tests
-pytest tests/test_*integration.py -v
+# End-to-end pipeline test (1 test)
+pytest tests/test_e2e_pipeline.py -v
 
 # With coverage report
-pytest tests/test_probes.py tests/test_opencode_integration.py --cov=esass.probes --cov=examples --cov-report=html
+pytest tests/ --cov=esass.probes --cov=esass_prototype --cov=examples --cov-report=html
 
 # Specific probe
 pytest tests/test_probes.py::TestToolCallProbe -v
