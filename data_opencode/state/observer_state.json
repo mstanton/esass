@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "mode": "simulation",
+  "started_at": null,
+  "session_count": 0,
+  "event_count": 0,
+  "total_sessions": 1,
+  "total_events": 10
+}

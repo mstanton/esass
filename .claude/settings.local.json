@@ -16,7 +16,9 @@
       "Bash(uv run esass --help:*)",
       "Bash(uv run:*)",
       "Bash(python -m pytest:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)"
     ]
   }
 }

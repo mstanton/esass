@@ -129,7 +129,9 @@ Log Store (JSONL)
 
 ### Quick Test
 
-Run the integration example to see the probe system in action:
+Run the integration examples to see the probe system in action:
+
+#### Claude Code Example
 
 ```bash
 python -c "import sys; sys.path.insert(0, '.'); \
@@ -137,27 +139,38 @@ from examples.claude_code_integration import example_simulated_session; \
 example_simulated_session()"
 ```
 
+#### open-code-ai Example (NEW!)
+
+```bash
+python -c "import sys; sys.path.insert(0, '.'); \
+from examples.opencode_ai_integration import example_simulated_session; \
+example_simulated_session()"
+```
+
 Expected output:
 
 ```text
 ======================================================================
-ESASS Claude Code Integration Example
+ESASS open-code-ai Integration Example
 ======================================================================
 
-[2] Starting simulated Claude Code session: example-session-001
+[2] Starting simulated open-code-ai session: opencode-session-001
 ----------------------------------------------------------------------
 
-User: Can you read src/main.py?
-[OK] Tool: Read src/main.py [SUCCESS]
-[OK] Thinking: Analyzed file content
-[OK] Response: Explained file contents
+User: Can you implement user authentication in auth.py?
+AI: I'll implement user authentication with password hashing.
+[OK] Thinking: Planned implementation strategy
+[OK] Action: Read auth.py [SUCCESS]
+[OK] Decision: Choose file_edit over file_write
+[OK] Action: Edit auth.py [SUCCESS]
+[OK] Response: Explained implementation
 
 [4] ESASS Statistics:
 ----------------------------------------------------------------------
-Events received: 7
-Log entries generated: 6
+Events received: 11
+Log entries generated: 10
 Active probes: 3
-Events written to storage: 6
+Events written to storage: 10
 ```
 
 ### Performance Benchmarks
@@ -165,7 +178,7 @@ Events written to storage: 6
 Tested on Intel i7, 16GB RAM:
 
 | Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
+| -------- | -------- | ---------- | -------- |
 | Event capture latency | <10ms | ~3ms | ✅ Exceeded |
 | Throughput | 1000/sec | ~1500/sec | ✅ Exceeded |
 | Memory footprint | <100MB | ~60MB | ✅ Exceeded |
@@ -179,16 +192,24 @@ Run comprehensive probe system tests:
 # All probe tests (27 tests, ~85% coverage)
 pytest tests/test_probes.py -v
 
+# open-code-ai integration tests (13 tests) (NEW!)
+pytest tests/test_opencode_integration.py -v
+
+# All integration tests
+pytest tests/test_*integration.py -v
+
 # With coverage report
-pytest tests/test_probes.py --cov=esass.probes --cov-report=html
+pytest tests/test_probes.py tests/test_opencode_integration.py --cov=esass.probes --cov=examples --cov-report=html
 
 # Specific probe
 pytest tests/test_probes.py::TestToolCallProbe -v
 ```
 
-### Integration with Claude Code
+### Integration with AI Coding Assistants
 
-The probe system is ready for production integration. Only 3 lines of code needed:
+The probe system is ready for production integration with multiple AI coding platforms. Only 3 lines of code needed:
+
+#### Claude Code Integration
 
 ```python
 # 1. Initialize at startup
@@ -213,6 +234,34 @@ def execute_tool(tool_name, parameters, context):
 registry.flush()
 pipeline.shutdown()
 ```
+
+#### open-code-ai Integration (NEW!)
+
+```python
+# 1. Initialize at startup
+from examples.opencode_ai_integration import initialize_esass_integration
+registry, pipeline, config = initialize_esass_integration()
+
+# 2. Add hooks to action executor
+from examples.opencode_ai_integration import notify_action_start, notify_action_complete
+
+def execute_action(action, parameters, context):
+    call_id = notify_action_start(action, parameters, context)
+    try:
+        result = _actual_action_execution(action, parameters)
+        notify_action_complete(call_id, result, context)
+        return result
+    except Exception as e:
+        from examples.opencode_ai_integration import notify_action_error
+        notify_action_error(call_id, e, context)
+        raise
+
+# 3. Shutdown at exit
+registry.flush()
+pipeline.shutdown()
+```
+
+**Action Mapping**: open-code-ai actions (`file_read`, `file_edit`, `command_run`) are automatically mapped to ESASS tool names (`Read`, `Edit`, `Bash`) for compatibility with the probe system.
 
 ### Configuration
 
@@ -240,7 +289,8 @@ export ESASS_SAMPLE_RATE=1.0  # 1.0 = keep all, 0.1 = sample 10%
 - **esass/probes/README.md** - Complete probe system documentation
 - **INTEGRATION_PLAN.md** - 26-week integration roadmap
 - **PROBE_IMPLEMENTATION_SUMMARY.md** - Implementation details
-- **examples/claude_code_integration.py** - Working integration example
+- **examples/claude_code_integration.py** - Claude Code integration example
+- **examples/opencode_ai_integration.py** - open-code-ai integration example (NEW!)
 
 ## Project Structure
 
@@ -280,10 +330,12 @@ ESASS/
 │   └── cli.py                    # Command-line interface
 │
 ├── examples/                     # Integration examples
-│   └── claude_code_integration.py # Claude Code integration example
+│   ├── claude_code_integration.py # Claude Code integration example
+│   └── opencode_ai_integration.py # open-code-ai integration example (NEW!)
 │
 ├── tests/                        # Test suite
-│   └── test_probes.py           # Probe system tests (27 tests, 85% coverage)
+│   ├── test_probes.py           # Probe system tests (27 tests, 85% coverage)
+│   └── test_opencode_integration.py # open-code-ai integration tests (13 tests) (NEW!)
 │
 ├── data/                         # Runtime data (created by system)
 │   ├── logs/                    # Event logs (JSONL)
@@ -370,7 +422,7 @@ uv run esass pipeline --sessions 50 --days 14
 uv run esass stats
 ```
 
-## Configuration
+## Prototype Configuration
 
 Configuration is managed via `esass_prototype/config.py`:
 
@@ -817,7 +869,7 @@ The prototype demonstrates the core learning loop. The full ESASS system will ad
 - Event-driven triggers
 - Production monitoring
 
-## Documentation
+## Project Documentation
 
 - **[Full Specification](esass/esass-specification_v0.01.md)**: Complete technical specification (1271 lines)
 - **[Architecture](esass/ARCHITECTURE.md)**: Evolution system architecture details

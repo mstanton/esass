@@ -466,38 +466,50 @@ Add new features:
 
 ESASS now includes a production-ready probe system for capturing real Claude Code events.
 
-#### Run the Integration Example
+#### Run the Integration Examples
+
+**Claude Code Integration:**
 
 ```bash
 # Test the probe system with simulated Claude Code session
 python -c "import sys; sys.path.insert(0, '.'); from examples.claude_code_integration import example_simulated_session; example_simulated_session()"
 ```
 
-Expected output:
+**open-code-ai Integration (NEW!):**
+
+```bash
+# Test the probe system with simulated open-code-ai session
+python -c "import sys; sys.path.insert(0, '.'); from examples.opencode_ai_integration import example_simulated_session; example_simulated_session()"
+```
+
+Expected output (open-code-ai):
 
 ```text
 ======================================================================
-ESASS Claude Code Integration Example
+ESASS open-code-ai Integration Example
 ======================================================================
 
 [1] Initializing ESASS integration...
 
-[2] Starting simulated Claude Code session: example-session-001
+[2] Starting simulated open-code-ai session: opencode-session-001
 ----------------------------------------------------------------------
 
-User: Can you read src/main.py?
-[OK] Tool: Read src/main.py [SUCCESS]
-[OK] Thinking: Analyzed file content
-[OK] Response: Explained file contents
+User: Can you implement user authentication in auth.py?
+AI: I'll implement user authentication with password hashing.
+[OK] Thinking: Planned implementation strategy
+[OK] Action: Read auth.py [SUCCESS]
+[OK] Decision: Choose file_edit over file_write
+[OK] Action: Edit auth.py [SUCCESS]
+[OK] Response: Explained implementation
 
 [4] ESASS Statistics:
 ----------------------------------------------------------------------
-Events received: 7
-Log entries generated: 6
+Events received: 11
+Log entries generated: 10
 Active probes: 3
 
-Events written to storage: 6
-Data directory: data_example
+Events written to storage: 10
+Data directory: data_opencode
 ```
 
 #### Run Probe System Tests
@@ -506,8 +518,14 @@ Data directory: data_example
 # Run all probe tests
 pytest tests/test_probes.py -v
 
+# Run open-code-ai integration tests (NEW!)
+pytest tests/test_opencode_integration.py -v
+
+# Run all integration tests
+pytest tests/test_*integration.py -v
+
 # Run with coverage report
-pytest tests/test_probes.py --cov=esass.probes --cov-report=html
+pytest tests/test_probes.py tests/test_opencode_integration.py --cov=esass.probes --cov=examples --cov-report=html
 
 # Run specific probe tests
 pytest tests/test_probes.py::TestToolCallProbe -v
@@ -538,6 +556,8 @@ The probe system provides three specialized observers:
 
 #### Quick Integration (3 lines of code)
 
+**For Claude Code:**
+
 ```python
 # 1. Initialize at startup
 from esass.probes.config import initialize_system
@@ -561,6 +581,34 @@ registry.flush()
 pipeline.shutdown()
 ```
 
+**For open-code-ai (NEW!):**
+
+```python
+# 1. Initialize at startup
+from examples.opencode_ai_integration import initialize_esass_integration
+registry, pipeline, config = initialize_esass_integration()
+
+# 2. Add hooks to open-code-ai action executor
+from examples.opencode_ai_integration import notify_action_start, notify_action_complete
+
+def execute_action(action, parameters, context):
+    call_id = notify_action_start(action, parameters, context)
+    try:
+        result = _actual_action_execution(action, parameters)
+        notify_action_complete(call_id, result, context)
+        return result
+    except Exception as e:
+        from examples.opencode_ai_integration import notify_action_error
+        notify_action_error(call_id, e, context)
+        raise
+
+# 3. Shutdown at exit
+registry.flush()
+pipeline.shutdown()
+```
+
+**Action Mapping**: open-code-ai actions like `file_read`, `file_edit`, `command_run` are automatically mapped to ESASS tool names (`Read`, `Edit`, `Bash`).
+
 #### Configuration via Environment Variables
 
 ```bash
@@ -583,7 +631,7 @@ export ESASS_FLUSH_INTERVAL=5.0
 The probe system has been tested and exceeds all targets:
 
 | Metric | Target | Achieved |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | Event capture latency | <10ms | ~3ms ✅ |
 | Throughput | 1000/sec | ~1500/sec ✅ |
 | Memory footprint | <100MB | ~60MB ✅ |
