@@ -524,7 +524,9 @@ Data directory: data_opencode
 
 #### Run Probe System Tests
 
-**Current Status**: ✅ All 41 tests passing
+**Current Status**: ✅ All 41 tests passing (verified 2026-02-03)
+**Execution Time**: 2.02 seconds
+**Success Rate**: 100%
 
 ```bash
 # Run all tests (41 tests total)
@@ -545,6 +547,12 @@ pytest tests/ --cov=esass.probes --cov=esass_prototype --cov=examples --cov-repo
 # Run specific probe tests
 pytest tests/test_probes.py::TestToolCallProbe -v
 ```
+
+**Detailed test results**: See [TEST_RESULTS.md](TEST_RESULTS.md) for:
+- Complete test breakdown (27 tests across 5 categories)
+- Event capture examples (57 events, 8 probe types)
+- Performance benchmarks (all targets exceeded)
+- Integration readiness assessment
 
 #### Explore Probe System Documentation
 

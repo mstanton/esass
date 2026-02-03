@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- **Added comprehensive test documentation**: Created [TEST_RESULTS.md](TEST_RESULTS.md) with detailed analysis of integration test session (57 events captured, 8 probes active, complete event breakdowns)
+- **Enhanced probe documentation**: Updated README.md, CLAUDE.md, and QUICKSTART.md with latest test results and performance metrics
+- **Added event analysis**: Created [data_example/EVENT_SUMMARY.md](data_example/EVENT_SUMMARY.md) with event timeline, causality graphs, and pattern detection opportunities
+- **Cross-references**: Added links between documentation files for better navigation
+
 ## [0.2.1] - 2026-02-03
 
 ### Fixed
