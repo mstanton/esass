@@ -42,6 +42,36 @@ class DecisionProbeConfig(ProbeConfig):
 
 
 @dataclass
+class ErrorRecoveryProbeConfig(ProbeConfig):
+    """Configuration for error recovery probe"""
+    max_recovery_window_seconds: int = 300
+
+
+@dataclass
+class StrategyShiftProbeConfig(ProbeConfig):
+    """Configuration for strategy shift probe"""
+    max_strategy_duration_seconds: int = 600
+
+
+@dataclass
+class CalibrationProbeConfig(ProbeConfig):
+    """Configuration for calibration probe"""
+    verification_window_seconds: int = 300
+
+
+@dataclass
+class InsightProbeConfig(ProbeConfig):
+    """Configuration for insight probe"""
+    min_insight_confidence: float = 0.7
+
+
+@dataclass
+class ScopeExpansionProbeConfig(ProbeConfig):
+    """Configuration for scope expansion probe"""
+    pass  # Uses default ProbeConfig
+
+
+@dataclass
 class PipelineConfig:
     """Configuration for event pipeline"""
     buffer_size: int = 100
@@ -67,10 +97,17 @@ class ESASSProbeSystemConfig:
 
     Supports environment variable overrides using ESASS_ prefix.
     """
-    # Probe configurations
+    # Core probe configurations
     tool_probe: ToolProbeConfig = field(default_factory=ToolProbeConfig)
     reasoning_probe: ReasoningProbeConfig = field(default_factory=ReasoningProbeConfig)
     decision_probe: DecisionProbeConfig = field(default_factory=DecisionProbeConfig)
+
+    # Enhanced probe configurations
+    error_recovery_probe: ErrorRecoveryProbeConfig = field(default_factory=ErrorRecoveryProbeConfig)
+    strategy_shift_probe: StrategyShiftProbeConfig = field(default_factory=StrategyShiftProbeConfig)
+    calibration_probe: CalibrationProbeConfig = field(default_factory=CalibrationProbeConfig)
+    insight_probe: InsightProbeConfig = field(default_factory=InsightProbeConfig)
+    scope_expansion_probe: ScopeExpansionProbeConfig = field(default_factory=ScopeExpansionProbeConfig)
 
     # Pipeline configuration
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
@@ -165,6 +202,43 @@ class ESASSProbeSystemConfig:
             'ESASS_MIN_OPTIONS', config.decision_probe.min_options
         )
 
+        # Error recovery probe
+        config.error_recovery_probe.enabled = cls._get_bool_env(
+            'ESASS_ERROR_RECOVERY_PROBE_ENABLED', config.error_recovery_probe.enabled
+        )
+        config.error_recovery_probe.max_recovery_window_seconds = cls._get_int_env(
+            'ESASS_MAX_RECOVERY_WINDOW', config.error_recovery_probe.max_recovery_window_seconds
+        )
+
+        # Strategy shift probe
+        config.strategy_shift_probe.enabled = cls._get_bool_env(
+            'ESASS_STRATEGY_SHIFT_PROBE_ENABLED', config.strategy_shift_probe.enabled
+        )
+        config.strategy_shift_probe.max_strategy_duration_seconds = cls._get_int_env(
+            'ESASS_MAX_STRATEGY_DURATION', config.strategy_shift_probe.max_strategy_duration_seconds
+        )
+
+        # Calibration probe
+        config.calibration_probe.enabled = cls._get_bool_env(
+            'ESASS_CALIBRATION_PROBE_ENABLED', config.calibration_probe.enabled
+        )
+        config.calibration_probe.verification_window_seconds = cls._get_int_env(
+            'ESASS_VERIFICATION_WINDOW', config.calibration_probe.verification_window_seconds
+        )
+
+        # Insight probe
+        config.insight_probe.enabled = cls._get_bool_env(
+            'ESASS_INSIGHT_PROBE_ENABLED', config.insight_probe.enabled
+        )
+        config.insight_probe.min_insight_confidence = cls._get_float_env(
+            'ESASS_MIN_INSIGHT_CONFIDENCE', config.insight_probe.min_insight_confidence
+        )
+
+        # Scope expansion probe
+        config.scope_expansion_probe.enabled = cls._get_bool_env(
+            'ESASS_SCOPE_EXPANSION_PROBE_ENABLED', config.scope_expansion_probe.enabled
+        )
+
         return config
 
     @staticmethod
@@ -237,8 +311,15 @@ def create_default_probes(config: ESASSProbeSystemConfig) -> List:
     from esass.probes.decision_probe import DecisionProbe, TradeoffAnalysisProbe
     from esass.probes.reasoning_probe import CausalReasoningProbe, ReasoningProbe
     from esass.probes.tool_probe import ToolCallProbe, ToolSequenceDetector
+    from esass.probes.error_recovery_probe import ErrorRecoveryProbe
+    from esass.probes.strategy_shift_probe import StrategyShiftProbe
+    from esass.probes.calibration_probe import CalibrationProbe
+    from esass.probes.insight_probe import InsightProbe
+    from esass.probes.scope_expansion_probe import ScopeExpansionProbe
 
     probes = []
+
+    # Core probes
 
     # Tool probe
     if config.tool_probe.enabled:
@@ -282,6 +363,47 @@ def create_default_probes(config: ESASSProbeSystemConfig) -> List:
                 enabled=config.decision_probe.enabled,
                 min_options=config.decision_probe.min_options
             )
+        probes.append(probe)
+
+    # Enhanced probes
+
+    # Error recovery probe
+    if config.error_recovery_probe.enabled:
+        probe = ErrorRecoveryProbe(
+            enabled=config.error_recovery_probe.enabled,
+            max_recovery_window_seconds=config.error_recovery_probe.max_recovery_window_seconds
+        )
+        probes.append(probe)
+
+    # Strategy shift probe
+    if config.strategy_shift_probe.enabled:
+        probe = StrategyShiftProbe(
+            enabled=config.strategy_shift_probe.enabled,
+            max_strategy_duration_seconds=config.strategy_shift_probe.max_strategy_duration_seconds
+        )
+        probes.append(probe)
+
+    # Calibration probe
+    if config.calibration_probe.enabled:
+        probe = CalibrationProbe(
+            enabled=config.calibration_probe.enabled,
+            verification_window_seconds=config.calibration_probe.verification_window_seconds
+        )
+        probes.append(probe)
+
+    # Insight probe
+    if config.insight_probe.enabled:
+        probe = InsightProbe(
+            enabled=config.insight_probe.enabled,
+            min_insight_confidence=config.insight_probe.min_insight_confidence
+        )
+        probes.append(probe)
+
+    # Scope expansion probe
+    if config.scope_expansion_probe.enabled:
+        probe = ScopeExpansionProbe(
+            enabled=config.scope_expansion_probe.enabled
+        )
         probes.append(probe)
 
     return probes

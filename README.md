@@ -2,7 +2,7 @@
 
 A meta-cognitive architecture that enables AI skills to achieve operational self-awareness through observation, pattern recognition, and autonomous skill formation.
 
-**Current Status**: Functional prototype demonstrating core learning loop
+**Current Status**: Production-ready probe system + OpenClaw recursive learning loop integration
 
 ## What is ESASS?
 
@@ -128,6 +128,10 @@ Log Store (JSONL)
 ```
 
 ### Quick Test
+
+Run the integration examples to see the probe system in action:
+
+#### Claude Code Example
 
 Run the integration examples to see the probe system in action:
 
@@ -292,11 +296,154 @@ export ESASS_SAMPLE_RATE=1.0  # 1.0 = keep all, 0.1 = sample 10%
 - **examples/claude_code_integration.py** - Claude Code integration example
 - **examples/opencode_ai_integration.py** - open-code-ai integration example (NEW!)
 
+## OpenClaw × ClawHub Integration (NEW!)
+
+**Status**: ✅ Complete recursive learning loop implementation (1873 lines)
+
+ESASS now includes a complete integration with OpenClaw and ClawHub that closes the recursive learning loop: observation → pattern detection → skill generation → publication → ecosystem deployment.
+
+### The Recursive Loop
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    RECURSIVE LEARNING CYCLE                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Day 1-3: OBSERVE                                           │
+│  ├── OpenClaw agents execute tasks                          │
+│  ├── ESASS probes capture events                           │
+│  └── Event pipeline writes to log store                     │
+│                                                             │
+│  Day 4-7: DETECT                                            │
+│  ├── Pattern detector mines frequent sequences              │
+│  ├── Quality metrics computed (support, confidence)         │
+│  └── Skill candidates identified                            │
+│                                                             │
+│  Day 7: GENERATE                                            │
+│  ├── Template generator creates SkillManifest              │
+│  ├── Formatter converts to SKILL.md                        │
+│  └── Validation ensures quality                             │
+│                                                             │
+│  Day 7: PUBLISH                                             │
+│  ├── ClawHub client publishes skill                        │
+│  ├── Vector embedding computed for search                   │
+│  └── Skill available to all OpenClaw users                  │
+│                                                             │
+│  Day 8+: EVOLVE                                             │
+│  ├── Feedback tracks skill usage                           │
+│  ├── Similar skills unify                                   │
+│  ├── New patterns emerge from enhanced agents               │
+│  └── LOOP CLOSES → Back to OBSERVE                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+**OpenClaw Event Bridge** (`openclaw-plugin/src/bridge/openclaw_hooks.py`)
+
+- Captures events from OpenClaw agent loop
+- Routes to ESASS probes (tool calls, reasoning, decisions)
+- Tracks skill activations and feedback metrics
+- Maintains session state and causality chains
+
+**Skill Formatter** (`openclaw-plugin/src/adapters/skill_formatter.py`)
+
+- Converts ESASS SkillManifest to OpenClaw SKILL.md format
+- Generates YAML frontmatter with genesis metadata
+- Auto-generates workflow steps, examples, error handling
+- Tracks evolution history and skill lineage
+
+**ClawHub Client** (`openclaw-plugin/src/adapters/clawhub_client.py`)
+
+- Publishes skills to ClawHub registry
+- Manages versioning (semver auto-bump)
+- Handles authentication and rate limiting
+- Supports batch operations and sync
+
+**Recursive Loop Controller** (`openclaw-plugin/src/loop/controller.py`)
+
+- Orchestrates the complete learning cycle
+- Configurable timing and quality thresholds
+- Metrics tracking and health monitoring
+- Safety guardrails (rate limits, human approval)
+
+### Quick Start
+
+```bash
+# Run the demo loop
+cd openclaw-plugin
+python examples/quick_start.py
+```
+
+This will simulate a complete cycle:
+
+1. Generate 5 OpenClaw sessions with git workflow events
+2. Detect patterns from accumulated observations
+3. Generate skills from validated patterns
+4. Display cycle metrics and loop status
+
+### Configuration
+
+```bash
+# ESASS Configuration
+export ESASS_ENABLED=true
+export ESASS_DATA_DIR=./data/esass
+export ESASS_SAMPLE_RATE=1.0
+
+# OpenClaw Integration
+export OPENCLAW_WORKSPACE=~/.openclaw
+export OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
+
+# ClawHub Publishing
+export CLAWHUB_REGISTRY=https://clawhub.com
+export CLAWHUB_TOKEN=your-token-here
+
+# Loop Timing
+export LOOP_OBSERVATION_HOURS=24
+export LOOP_CYCLE_HOURS=6
+export LOOP_AUTO_PUBLISH=true
+```
+
+### Production Usage
+
+```python
+from openclaw_plugin.loop.controller import RecursiveLoopController, LoopConfig
+
+# Configure the loop
+config = LoopConfig(
+    observation_window_hours=24,
+    cycle_interval_hours=6,
+    min_support=10,
+    min_confidence=0.8,
+    auto_publish=True,
+    require_human_approval=False
+)
+
+# Create and start controller
+controller = RecursiveLoopController(config=config)
+
+# Register callbacks
+controller.on_skill_generated(lambda s: print(f"✓ Generated: {s.name}"))
+controller.on_skill_published(lambda s, r: print(f"✓ Published: {r.url}"))
+
+# Run continuously
+await controller.start()
+```
+
+### Documentation
+
+- **openclaw-plugin/README.md** - Integration overview
+- **openclaw-plugin/ESASS_OPENCLAW_INTEGRATION.md** - Architecture details
+- **openclaw-plugin/IMPLEMENTATION_GUIDE.md** - Complete code walkthrough
+- **openclaw-plugin/EXPLORABLE_DOCUMENTATION.md** - Visual deep dives
+- **openclaw-plugin/OPENCLAW_PLUGIN_SPEC.md** - Technical specification
+
 ## Project Structure
 
 ```text
 ESASS/
-├── esass/                        # Real-time event capture system (NEW!)
+├── esass/                        # Real-time event capture system
 │   ├── probes/                   # Probe infrastructure
 │   │   ├── __init__.py
 │   │   ├── base.py              # Base probe classes and tag extraction
@@ -308,6 +455,32 @@ ESASS/
 │   │   ├── config.py            # Configuration system
 │   │   └── README.md            # Probe documentation
 │   └── __init__.py
+│
+├── openclaw-plugin/              # OpenClaw × ClawHub integration (NEW!)
+│   ├── src/
+│   │   ├── bridge/              # OpenClaw event bridge
+│   │   │   ├── openclaw_hooks.py # Event capture and routing
+│   │   │   └── __init__.py
+│   │   ├── adapters/            # Format conversion and publishing
+│   │   │   ├── skill_formatter.py # ESASS → SKILL.md conversion
+│   │   │   ├── clawhub_client.py  # ClawHub API client
+│   │   │   └── __init__.py
+│   │   ├── loop/                # Recursive learning loop
+│   │   │   ├── controller.py   # Loop orchestration
+│   │   │   └── __init__.py
+│   │   ├── config/              # Configuration management
+│   │   │   ├── settings.py     # Integration settings
+│   │   │   └── __init__.py
+│   │   └── __init__.py
+│   ├── examples/
+│   │   └── quick_start.py      # Demo script
+│   ├── skills/
+│   │   └── generated/          # ESASS-generated skills
+│   ├── README.md                # Integration overview
+│   ├── ESASS_OPENCLAW_INTEGRATION.md # Architecture details
+│   ├── IMPLEMENTATION_GUIDE.md  # Complete code walkthrough
+│   ├── EXPLORABLE_DOCUMENTATION.md # Visual deep dives
+│   └── OPENCLAW_PLUGIN_SPEC.md  # Technical specification
 │
 ├── esass_prototype/              # Core prototype implementation
 │   ├── observation/              # Event simulation and logging
@@ -331,11 +504,11 @@ ESASS/
 │
 ├── examples/                     # Integration examples
 │   ├── claude_code_integration.py # Claude Code integration example
-│   └── opencode_ai_integration.py # open-code-ai integration example (NEW!)
+│   └── opencode_ai_integration.py # open-code-ai integration example
 │
 ├── tests/                        # Test suite
 │   ├── test_probes.py           # Probe system tests (27 tests, 85% coverage)
-│   └── test_opencode_integration.py # open-code-ai integration tests (13 tests) (NEW!)
+│   └── test_opencode_integration.py # open-code-ai integration tests (13 tests)
 │
 ├── data/                         # Runtime data (created by system)
 │   ├── logs/                    # Event logs (JSONL)
@@ -351,8 +524,8 @@ ESASS/
 ├── test_pipeline.py             # Full pipeline demo
 ├── sensors.py                   # Dagster evolution sensors
 ├── QUICKSTART.md                # Quick start guide
-├── INTEGRATION_PLAN.md          # 26-week integration roadmap (NEW!)
-├── PROBE_IMPLEMENTATION_SUMMARY.md # Probe implementation details (NEW!)
+├── INTEGRATION_PLAN.md          # 26-week integration roadmap
+├── PROBE_IMPLEMENTATION_SUMMARY.md # Probe implementation details
 ├── ARCHITECTURE.md              # System architecture
 ├── esass-specification_v0.01.md # Complete specification
 └── CLAUDE.md                    # Development guide
@@ -848,12 +1021,14 @@ The prototype demonstrates the core learning loop. The full ESASS system will ad
 - Semantic pattern detection (LDA, embeddings)
 - Structural pattern mining (graph patterns)
 - Behavioral pattern analysis
+- Multi-dimensional pattern clustering
 
 **Phase 4 - Production Storage**:
 
 - Graph database for pattern relationships
 - Vector database for semantic search
 - Time-series database for log queries
+- Distributed storage layer
 
 **Phase 5 - Skill Evolution**:
 
@@ -861,6 +1036,7 @@ The prototype demonstrates the core learning loop. The full ESASS system will ad
 - Behavior chain optimization
 - Emergent capability detection
 - Automatic skill refinement
+- Skill lifecycle management
 
 **Phase 6 - Dagster Integration**:
 
@@ -868,8 +1044,9 @@ The prototype demonstrates the core learning loop. The full ESASS system will ad
 - Scheduled analysis jobs
 - Event-driven triggers
 - Production monitoring
+- Health dashboards
 
-## Project Documentation
+## Documentation
 
 - **[Full Specification](esass/esass-specification_v0.01.md)**: Complete technical specification (1271 lines)
 - **[Architecture](esass/ARCHITECTURE.md)**: Evolution system architecture details
@@ -918,8 +1095,8 @@ dev-dependencies = [
 ## Authors
 
 **Collaborative Design**: Human + AI
-**Version**: 0.1.0
-**Date**: 2026-02-01
+**Version**: 0.2.0
+**Last Updated**: 2026-02-02
 
 ---
 
