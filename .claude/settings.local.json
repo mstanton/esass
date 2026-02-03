@@ -19,6 +19,8 @@
       "Bash(python:*)",
       "Bash(mkdir:*)",
       "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
       "Bash(wc:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)"

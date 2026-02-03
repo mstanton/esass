@@ -133,6 +133,10 @@ Run the integration examples to see the probe system in action:
 
 #### Claude Code Example
 
+Run the integration examples to see the probe system in action:
+
+#### Claude Code Example
+
 ```bash
 python -c "import sys; sys.path.insert(0, '.'); \
 from examples.claude_code_integration import example_simulated_session; \
@@ -337,24 +341,28 @@ ESASS now includes a complete integration with OpenClaw and ClawHub that closes 
 ### Key Components
 
 **OpenClaw Event Bridge** (`openclaw-plugin/src/bridge/openclaw_hooks.py`)
+
 - Captures events from OpenClaw agent loop
 - Routes to ESASS probes (tool calls, reasoning, decisions)
 - Tracks skill activations and feedback metrics
 - Maintains session state and causality chains
 
 **Skill Formatter** (`openclaw-plugin/src/adapters/skill_formatter.py`)
+
 - Converts ESASS SkillManifest to OpenClaw SKILL.md format
 - Generates YAML frontmatter with genesis metadata
 - Auto-generates workflow steps, examples, error handling
 - Tracks evolution history and skill lineage
 
 **ClawHub Client** (`openclaw-plugin/src/adapters/clawhub_client.py`)
+
 - Publishes skills to ClawHub registry
 - Manages versioning (semver auto-bump)
 - Handles authentication and rate limiting
 - Supports batch operations and sync
 
 **Recursive Loop Controller** (`openclaw-plugin/src/loop/controller.py`)
+
 - Orchestrates the complete learning cycle
 - Configurable timing and quality thresholds
 - Metrics tracking and health monitoring
@@ -369,6 +377,7 @@ python examples/quick_start.py
 ```
 
 This will simulate a complete cycle:
+
 1. Generate 5 OpenClaw sessions with git workflow events
 2. Detect patterns from accumulated observations
 3. Generate skills from validated patterns
@@ -999,89 +1008,55 @@ Current prototype performance (on test data):
 
 ## Roadmap
 
-### ✅ Completed
+The prototype demonstrates the core learning loop. The full ESASS system will add:
 
-**Phase 1 - Core Prototype**:
-- ✓ Event observation and logging
-- ✓ Pattern detection with quality metrics
-- ✓ Skill candidate identification
-- ✓ Automated skill generation
-- ✓ Obsidian export for visualization
+**Phase 2 - Real Capture**:
 
-**Phase 2 - Real-Time Capture**:
-- ✓ Production-ready probe system (tool, reasoning, decision)
-- ✓ Event routing and coordination
-- ✓ Buffered async processing pipeline
-- ✓ Integration examples (Claude Code, open-code-ai)
-- ✓ Comprehensive test coverage (85%)
+- Hook into Claude Code events
+- Capture actual reasoning, tool usage, decisions
+- Real-time logging pipeline
 
-**Phase 3 - Recursive Learning Loop**:
-- ✓ OpenClaw event bridge
-- ✓ ESASS → SKILL.md skill formatter
-- ✓ ClawHub publishing client
-- ✓ Loop orchestration controller
-- ✓ Configuration and metrics system
+**Phase 3 - Advanced Patterns**:
 
-### 🚧 In Progress
-
-**Phase 4 - Production Deployment**:
-- Claude Code hook integration
-- OpenClaw gateway connection
-- ClawHub authentication setup
-- Monitoring and alerting
-
-### 📋 Planned
-
-**Phase 5 - Advanced Patterns**:
 - Semantic pattern detection (LDA, embeddings)
 - Structural pattern mining (graph patterns)
 - Behavioral pattern analysis
 - Multi-dimensional pattern clustering
 
-**Phase 6 - Production Storage**:
+**Phase 4 - Production Storage**:
+
 - Graph database for pattern relationships
 - Vector database for semantic search
 - Time-series database for log queries
 - Distributed storage layer
 
-**Phase 7 - Skill Evolution**:
+**Phase 5 - Skill Evolution**:
+
 - Similarity-based skill consolidation
 - Behavior chain optimization
 - Emergent capability detection
 - Automatic skill refinement
 - Skill lifecycle management
 
-**Phase 8 - Dagster Integration**:
+**Phase 6 - Dagster Integration**:
+
 - Orchestration pipelines
 - Scheduled analysis jobs
 - Event-driven triggers
 - Production monitoring
 - Health dashboards
 
-## Project Documentation
+## Documentation
 
-### Core Specification
-- **[Full Specification](esass-specification_v0.01.md)**: Complete technical specification (1271 lines)
-- **[Architecture](ARCHITECTURE.md)**: Evolution system architecture details
-- **[Development Guide](CLAUDE.md)**: Guide for Claude Code development
-- **[Quick Start](QUICKSTART.md)**: Getting started guide
-
-### Probe System
-- **[Probe System README](esass/probes/README.md)**: Complete probe documentation
-- **[Integration Plan](INTEGRATION_PLAN.md)**: 26-week integration roadmap
-- **[Implementation Summary](PROBE_IMPLEMENTATION_SUMMARY.md)**: Implementation details
-
-### OpenClaw Integration
-- **[openclaw-plugin/README.md](openclaw-plugin/README.md)**: Integration overview
-- **[ESASS_OPENCLAW_INTEGRATION.md](openclaw-plugin/ESASS_OPENCLAW_INTEGRATION.md)**: Architecture details
-- **[IMPLEMENTATION_GUIDE.md](openclaw-plugin/IMPLEMENTATION_GUIDE.md)**: Complete code walkthrough
-- **[EXPLORABLE_DOCUMENTATION.md](openclaw-plugin/EXPLORABLE_DOCUMENTATION.md)**: Visual deep dives
+- **[Full Specification](esass/esass-specification_v0.01.md)**: Complete technical specification (1271 lines)
+- **[Architecture](esass/ARCHITECTURE.md)**: Evolution system architecture details
+- **[Development Guide](esass/CLAUDE.md)**: Guide for Claude Code development
+- **[Prototype README](esass/README.md)**: Original project overview
 
 ## Success Metrics
 
-The system successfully demonstrates:
+The prototype successfully demonstrates:
 
-### Core Prototype
 - ✓ Event observation and logging
 - ✓ Pattern detection with quality metrics
 - ✓ Skill candidate identification
@@ -1089,27 +1064,12 @@ The system successfully demonstrates:
 - ✓ Export to human-readable format
 - ✓ Complete learning loop execution
 
-Prototype test results:
+Test results show:
+
 - 20+ patterns detected from 35 sessions
 - 16 skill candidates identified (80% success rate)
 - 100% confidence on top patterns
 - 8+ days stability across pattern set
-
-### Production Probe System
-- ✓ Real-time event capture from AI coding assistants
-- ✓ 27 passing tests with 85% code coverage
-- ✓ <10ms capture latency (target met)
-- ✓ 1500+ events/sec throughput (150% of target)
-- ✓ ~60MB memory footprint (40% below target)
-- ✓ ~2% CPU overhead (60% below target)
-
-### OpenClaw Integration
-- ✓ Complete recursive learning loop (1873 lines)
-- ✓ OpenClaw event bridge with session tracking
-- ✓ ESASS → SKILL.md skill formatter
-- ✓ ClawHub publishing client with versioning
-- ✓ Loop orchestration with metrics
-- ✓ Configuration and safety guardrails
 
 ## Dependencies
 
