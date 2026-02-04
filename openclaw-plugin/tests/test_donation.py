@@ -16,6 +16,8 @@ class TestDonationConfig:
         assert cfg.enabled is True
         assert cfg.paypal_username == "mrstanton81"
         assert cfg.paypal_link == "https://paypal.me/mrstanton81"
+        assert cfg.paypal_crypto_enabled is True
+        assert cfg.paypal_crypto_link == "https://paypal.me/mrstanton81"
         assert cfg.project_name == "ESASS"
         assert len(cfg.suggested_amounts) == 3
 
@@ -31,11 +33,17 @@ class TestDonationConfig:
         assert cfg.paypal_username == "testuser"
         assert cfg.paypal_link == "https://paypal.me/testuser"
 
+    def test_from_env_crypto_disabled(self, monkeypatch):
+        monkeypatch.setenv("ESASS_PAYPAL_CRYPTO_ENABLED", "false")
+        cfg = DonationConfig.from_env()
+        assert cfg.paypal_crypto_enabled is False
+
     def test_render_message(self):
         cfg = DonationConfig()
         msg = cfg.render_message()
         assert "ESASS" in msg
         assert "paypal.me/mrstanton81" in msg
+        assert "crypto" in msg.lower()
 
 
 class TestFundingInfo:
@@ -43,14 +51,21 @@ class TestFundingInfo:
         cfg = DonationConfig()
         info = FundingInfo.from_config(cfg)
         assert info.paypal == cfg.paypal_link
+        assert info.paypal_crypto == cfg.paypal_crypto_link
         assert info.project == "ESASS"
         assert len(info.suggested_amounts) == 3
+
+    def test_from_config_crypto_disabled(self):
+        cfg = DonationConfig(paypal_crypto_enabled=False)
+        info = FundingInfo.from_config(cfg)
+        assert info.paypal_crypto is None
 
     def test_serialization_roundtrip(self):
         info = FundingInfo()
         d = info.to_dict()
         info2 = FundingInfo.from_dict(d)
         assert info2.paypal == info.paypal
+        assert info2.paypal_crypto == info.paypal_crypto
         assert info2.project == info.project
         assert info2.suggested_amounts == info.suggested_amounts
 
@@ -91,6 +106,7 @@ class TestFundingInjector:
         block = injector.get_frontmatter_block()
         assert "funding" in block
         assert block["funding"]["paypal"] == "https://paypal.me/mrstanton81"
+        assert block["funding"]["paypal_crypto"] == "https://paypal.me/mrstanton81"
 
 
 class TestDonationDisplay:
@@ -99,6 +115,14 @@ class TestDonationDisplay:
         msg = display.render_activation_message("my-skill")
         assert "my-skill" in msg
         assert "paypal.me" in msg
+        assert "crypto" in msg.lower()
+
+    def test_render_activation_message_crypto_disabled(self):
+        cfg = DonationConfig(paypal_crypto_enabled=False)
+        display = DonationDisplay(config=cfg)
+        msg = display.render_activation_message("my-skill")
+        assert "my-skill" in msg
+        assert "crypto" not in msg.lower()
 
     def test_render_for_agent(self):
         display = DonationDisplay()
@@ -106,6 +130,8 @@ class TestDonationDisplay:
         assert d["donation_enabled"] is True
         assert d["skill_name"] == "my-skill"
         assert "paypal_link" in d
+        assert d["paypal_crypto_enabled"] is True
+        assert d["paypal_crypto_link"] == "https://paypal.me/mrstanton81"
 
     def test_render_for_human(self):
         display = DonationDisplay()
@@ -113,12 +139,14 @@ class TestDonationDisplay:
         assert "my-skill" in txt
         assert "Coffee" in txt
         assert "Matt Stanton" in txt
+        assert "PayPal Crypto" in txt
 
     def test_render_markdown_badge(self):
         display = DonationDisplay()
         badge = display.render_markdown_badge()
         assert "shields.io" in badge
         assert "paypal.me" in badge
+        assert "Crypto" in badge
 
     def test_disabled_returns_empty(self):
         cfg = DonationConfig(enabled=False)

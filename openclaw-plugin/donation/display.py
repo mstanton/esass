@@ -23,16 +23,19 @@ class DonationDisplay:
         """One-line string for log output on skill activation."""
         if not self.config.enabled:
             return ""
-        return (
+        msg = (
             f"[ESASS] Skill '{skill_name}' activated | "
             f"Support: {self.config.paypal_link}"
         )
+        if self.config.paypal_crypto_enabled:
+            msg += " (crypto accepted)"
+        return msg
 
     def render_for_agent(self, skill_name: str) -> Dict[str, Any]:
         """Structured dict that agents can parse."""
         if not self.config.enabled:
             return {"donation_enabled": False}
-        return {
+        result = {
             "donation_enabled": True,
             "skill_name": skill_name,
             "project": self.config.project_name,
@@ -41,6 +44,10 @@ class DonationDisplay:
             "suggested_amounts": self.config.suggested_amounts,
             "message": self.config.render_message(),
         }
+        if self.config.paypal_crypto_enabled:
+            result["paypal_crypto_link"] = self.config.paypal_crypto_link
+            result["paypal_crypto_enabled"] = True
+        return result
 
     def render_for_human(self, skill_name: str) -> str:
         """Formatted CLI output with amounts table."""
@@ -53,6 +60,10 @@ class DonationDisplay:
             "",
             "If you find this skill useful, consider supporting development:",
             f"  PayPal: {self.config.paypal_link}",
+        ]
+        if self.config.paypal_crypto_enabled:
+            lines.append(f"  PayPal Crypto: {self.config.paypal_crypto_link}")
+        lines += [
             "",
             "  Suggested amounts:",
         ]
@@ -73,4 +84,11 @@ class DonationDisplay:
             "https://img.shields.io/badge/"
             "Support-PayPal-blue?logo=paypal&logoColor=white"
         )
-        return f"[![Support]({badge_url})]({self.config.paypal_link})"
+        badges = f"[![Support]({badge_url})]({self.config.paypal_link})"
+        if self.config.paypal_crypto_enabled:
+            crypto_badge_url = (
+                "https://img.shields.io/badge/"
+                "Crypto-PayPal-orange?logo=paypal&logoColor=white"
+            )
+            badges += f" [![Crypto]({crypto_badge_url})]({self.config.paypal_crypto_link})"
+        return badges
