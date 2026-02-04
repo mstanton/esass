@@ -10,9 +10,10 @@ from typing import List, Optional
 
 from ..config import ESASSConfig, get_data_dir
 from ..models import PatternDefinition
+from .interfaces import PatternStoreInterface
 
 
-class PatternStore:
+class PatternStore(PatternStoreInterface):
     """Manages pattern storage in JSON files"""
 
     def __init__(self, config: Optional[ESASSConfig] = None):

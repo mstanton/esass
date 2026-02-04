@@ -10,9 +10,10 @@ from typing import List, Optional
 
 from ..config import ESASSConfig, get_data_dir
 from ..models import SkillManifest
+from .interfaces import SkillStoreInterface
 
 
-class SkillStore:
+class SkillStore(SkillStoreInterface):
     """Manages skill manifest storage in JSON files"""
 
     def __init__(self, config: Optional[ESASSConfig] = None):

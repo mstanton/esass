@@ -14,7 +14,7 @@ Get up and running with the ESASS prototype in minutes.
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/MN88/esass.git
+git clone https://github.com/mstanton/esass.git
 cd esass
 ```
 
@@ -598,6 +598,7 @@ pytest tests/test_probes.py::TestToolCallProbe -v
 ```
 
 **Detailed test results**: See [TEST_RESULTS.md](TEST_RESULTS.md) for:
+
 - Complete test breakdown (27 probe tests across 5 categories)
 - Event capture examples (57 events, 8 probe types)
 - Performance benchmarks (all targets exceeded)

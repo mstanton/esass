@@ -31,6 +31,7 @@ class PatternType(Enum):
     """Pattern types"""
     TEMPORAL = "temporal"
     SEMANTIC = "semantic"
+    BEHAVIORAL = "behavioral"
     HYBRID = "hybrid"
 
 

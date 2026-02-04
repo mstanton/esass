@@ -11,9 +11,10 @@ from typing import List, Optional
 
 from ..config import ESASSConfig, get_data_dir
 from ..models import LogEntry
+from .interfaces import LogStoreInterface
 
 
-class LogStore:
+class LogStore(LogStoreInterface):
     """Manages JSONL log files organized by date"""
 
     def __init__(self, config: Optional[ESASSConfig] = None):
