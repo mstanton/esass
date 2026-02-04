@@ -1,144 +1,128 @@
+#!/usr/bin/env python3
 """
-Quick Start: ESASS × OpenClaw × ClawHub Integration
+Quick-start demo for the ESASS OpenClaw plugin.
 
-Run this to see the recursive learning loop in action.
+Shows basic bridge usage, skill formatting, and tracing.
 """
 
-import asyncio
-from datetime import datetime
 import sys
 from pathlib import Path
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Ensure project root is importable
+_root = str(Path(__file__).resolve().parents[2])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-# Import integration components
-from loop.controller import RecursiveLoopController, LoopConfig
-from bridge.openclaw_hooks import OpenClawESASSBridge, OpenClawEvent, OpenClawEventType
+_plugin = str(Path(__file__).resolve().parents[1])
+if _plugin not in sys.path:
+    sys.path.insert(0, _plugin)
+
+# Bootstrap the openclaw_plugin package
+import importlib, os
+if "openclaw_plugin" not in sys.modules:
+    spec = importlib.util.spec_from_file_location(
+        "openclaw_plugin",
+        os.path.join(_plugin, "__init__.py"),
+        submodule_search_locations=[_plugin],
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["openclaw_plugin"] = mod
+    spec.loader.exec_module(mod)
+
+from datetime import datetime
+
+from openclaw_plugin.config.settings import IntegrationConfig
+from openclaw_plugin.bridge.events import OpenClawEvent, OpenClawEventType
+from openclaw_plugin.bridge.hooks import OpenClawESASSBridge
+from openclaw_plugin.donation.models import DonationConfig
+from openclaw_plugin.donation.display import DonationDisplay
+from openclaw_plugin.tracing.stores import UsageStore, EvolutionStore, LineageStore
+from openclaw_plugin.tracing.usage_tracker import UsageAnalyticsTracker
+from openclaw_plugin.tracing.evolution_tracker import EvolutionHistoryTracker
+from openclaw_plugin.tracing.lineage_tracker import LineageTracker
+from openclaw_plugin.tracing.query import TracingQueryAPI
 
 
-async def main():
-    print("=" * 70)
-    print("ESASS × OpenClaw × ClawHub - Recursive Learning Loop")
-    print("=" * 70)
-    print()
+def main():
+    print("=" * 60)
+    print("ESASS OpenClaw Plugin - Quick Start Demo")
+    print("=" * 60)
 
-    # Configure the loop
-    config = LoopConfig(
-        observation_window_hours=1,  # Short window for demo
-        cycle_interval_hours=1,
-        min_events_for_detection=10,  # Lower threshold for demo
-        min_support=3,
-        min_confidence=0.7,
-        auto_publish=False,  # Disable for demo
-        require_human_approval=False
+    # 1. Configuration
+    config = IntegrationConfig()
+    print(f"\n[Config] Donation enabled: {config.donation.enabled}")
+    print(f"[Config] Tracing enabled: {config.tracing.enabled}")
+
+    # 2. Tracing setup (temp dir)
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="esass_demo_")
+    usage_store = UsageStore(base_dir=f"{tmp}/usage")
+    evo_store = EvolutionStore(base_dir=f"{tmp}/evolution")
+    lineage_store = LineageStore(base_dir=f"{tmp}/lineage")
+    usage_tracker = UsageAnalyticsTracker(store=usage_store)
+    evo_tracker = EvolutionHistoryTracker(store=evo_store)
+    lin_tracker = LineageTracker(store=lineage_store)
+
+    # 3. Bridge with tracing
+    bridge = OpenClawESASSBridge(
+        donation_config=DonationConfig(),
+        usage_tracker=usage_tracker,
     )
 
-    # Create controller
-    controller = RecursiveLoopController(config=config)
+    # 4. Simulate events
+    print("\n--- Simulating events ---")
+    bridge.on_event(OpenClawEvent(
+        event_type=OpenClawEventType.SESSION_START,
+        timestamp=datetime.utcnow(),
+        session_id="demo-sess",
+        channel="cli",
+    ))
 
-    # Register callbacks
-    controller.on_skill_generated(lambda skill: print(f"✓ Generated: {skill.name}"))
-    controller.on_cycle_complete(lambda results: print(f"✓ Cycle complete: {results}"))
+    bridge.on_event(OpenClawEvent(
+        event_type=OpenClawEventType.SKILL_ACTIVATED,
+        timestamp=datetime.utcnow(),
+        session_id="demo-sess",
+        data={"skill_name": "git-commit-helper", "skill_id": "s1"},
+        user_id="demo-user",
+    ))
 
-    print("[1] Simulating OpenClaw events...")
-    print("-" * 70)
+    bridge.on_event(OpenClawEvent(
+        event_type=OpenClawEventType.SKILL_COMPLETED,
+        timestamp=datetime.utcnow(),
+        session_id="demo-sess",
+        data={"skill_name": "git-commit-helper", "skill_id": "s1", "success": True, "duration_ms": 42},
+        user_id="demo-user",
+    ))
 
-    # Simulate some OpenClaw events
-    bridge = controller.bridge
+    bridge.on_event(OpenClawEvent(
+        event_type=OpenClawEventType.SESSION_END,
+        timestamp=datetime.utcnow(),
+        session_id="demo-sess",
+    ))
 
-    for session_num in range(5):
-        session_id = f"demo-session-{session_num}"
+    # 5. Record evolution
+    evo_tracker.record_creation(skill_id="s1", version="0.1.0", rationale="demo genesis")
 
-        # Session start
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.SESSION_START,
-            timestamp=datetime.utcnow(),
-            session_id=session_id,
-            channel="telegram"
-        ))
+    # 6. Query
+    api = TracingQueryAPI(
+        usage_store=usage_store,
+        evolution_store=evo_store,
+        lineage_store=lineage_store,
+    )
+    report = api.skill_report("s1")
+    print(f"\n[Query] Skill report for s1:")
+    print(f"  Activations: {report['usage']['activation_count']}")
+    print(f"  Successes:   {report['usage']['success_count']}")
+    print(f"  Evolution events: {len(report['evolution_events'])}")
 
-        # Thinking
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.THINKING_BLOCK,
-            timestamp=datetime.utcnow(),
-            session_id=session_id,
-            data={
-                "content": "I'll check the git status first to see what files have changed",
-                "type": "planning"
-            }
-        ))
+    # 7. Donation display
+    display = DonationDisplay()
+    print(f"\n[Donation] {display.render_activation_message('git-commit-helper')}")
 
-        # Tool call
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.TOOL_CALL_START,
-            timestamp=datetime.utcnow(),
-            session_id=session_id,
-            data={
-                "call_id": f"call-{session_num}-1",
-                "tool_name": "Bash",
-                "parameters": {"command": "git status"}
-            }
-        ))
-
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.TOOL_CALL_COMPLETE,
-            timestamp=datetime.utcnow(),
-            session_id=session_id,
-            data={
-                "call_id": f"call-{session_num}-1",
-                "success": True,
-                "result": "On branch main\nChanges not staged..."
-            }
-        ))
-
-        # Decision
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.APPROACH_SELECTED,
-            timestamp=datetime.utcnow(),
-            session_id=session_id,
-            data={
-                "approach": "stage_and_commit",
-                "alternatives": ["commit_all", "stage_selective"],
-                "rationale": "User has specific files to commit"
-            }
-        ))
-
-        # Session end
-        await bridge.on_event(OpenClawEvent(
-            event_type=OpenClawEventType.SESSION_END,
-            timestamp=datetime.utcnow(),
-            session_id=session_id
-        ))
-
-        print(f"  Session {session_num + 1}: ✓ Generated git workflow events")
-
-    print()
-    print("[2] Running learning cycle...")
-    print("-" * 70)
-
-    # Run one cycle
-    results = await controller.run_cycle()
-
-    print()
-    print("[3] Results")
-    print("-" * 70)
-    print(f"  Events processed: {results['events_processed']}")
-    print(f"  Patterns detected: {results['patterns_detected']}")
-    print(f"  Skills generated: {results['skills_generated']}")
-
-    print()
-    print("[4] Loop Status")
-    print("-" * 70)
-    status = controller.get_status()
-    for key, value in status["metrics"].items():
-        print(f"  {key}: {value}")
-
-    print()
-    print("=" * 70)
-    print("Demo complete! In production, the loop runs continuously.")
-    print("=" * 70)
+    print("\n" + "=" * 60)
+    print("Quick start complete!")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
