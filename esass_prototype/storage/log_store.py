@@ -39,6 +39,10 @@ class LogStore:
         else:
             raise ValueError(f"Invalid timestamp type: {type(timestamp)}")
 
+    def save(self, entry: LogEntry) -> None:
+        """Alias for append (backward compatibility)"""
+        self.append(entry)
+
     def append(self, entry: LogEntry) -> None:
         """Append a log entry to the appropriate daily file"""
         timestamp = self._parse_timestamp(entry.timestamp)

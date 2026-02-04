@@ -59,7 +59,7 @@ class ObservationLogger:
         Args:
             entry: LogEntry to log
         """
-        self.log_store.save(entry)
+        self.log_store.append(entry)
         self.state.total_events += 1
         self._save_state()
 
@@ -70,7 +70,7 @@ class ObservationLogger:
         Args:
             entries: List of LogEntry objects
         """
-        self.log_store.save_many(entries)
+        self.log_store.append_batch(entries)
         self.state.total_events += len(entries)
 
         # Count unique sessions
@@ -83,7 +83,7 @@ class ObservationLogger:
         """Start observation mode"""
         from datetime import datetime
 
-        self.state.is_enabled = True
+        self.state.enabled = True
         self.state.started_at = datetime.utcnow().isoformat()
         self.state.stopped_at = None
         self._save_state()
@@ -92,7 +92,7 @@ class ObservationLogger:
         """Stop observation mode"""
         from datetime import datetime
 
-        self.state.is_enabled = False
+        self.state.enabled = False
         self.state.stopped_at = datetime.utcnow().isoformat()
         self._save_state()
 
@@ -110,7 +110,7 @@ class ObservationLogger:
         log_stats = self.log_store.get_stats()
 
         return {
-            "observer_enabled": self.state.is_enabled,
+            "observer_enabled": self.state.enabled,
             "total_events": self.state.total_events,
             "total_sessions": self.state.total_sessions,
             "log_stats": log_stats

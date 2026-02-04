@@ -19,6 +19,12 @@ class EventType(Enum):
     DECISION = "decision"
     ERROR = "error"
     OUTCOME = "outcome"
+    # Meta-cognitive event types (from esass/probes)
+    ERROR_RECOVERY = "error_recovery"
+    STRATEGY_SHIFT = "strategy_shift"
+    CALIBRATION = "calibration"
+    INSIGHT = "insight"
+    SCOPE_EXPANSION = "scope_expansion"
 
 
 class PatternType(Enum):
@@ -42,6 +48,8 @@ class LogEntry:
     session_id: str
     caused_by: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    conversation_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def entry_id(self) -> str:
@@ -58,8 +66,10 @@ class LogEntry:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'LogEntry':
-        """Create from dictionary"""
-        return cls(**data)
+        """Create from dictionary, ignoring unknown keys for forward-compatibility"""
+        import dataclasses as _dc
+        valid_fields = {f.name for f in _dc.fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in valid_fields})
 
     @classmethod
     def create(cls, event_type: str, event_data: Dict[str, Any],
@@ -250,6 +260,7 @@ class ObserverState:
     enabled: bool = False
     mode: str = "simulation"  # "simulation" or "capture"
     started_at: Optional[str] = None
+    stopped_at: Optional[str] = None
     session_count: int = 0
     event_count: int = 0
     total_sessions: int = 0  # Backward compatibility
@@ -264,7 +275,9 @@ class ObserverState:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'ObserverState':
-        return cls(**data)
+        import dataclasses as _dc
+        valid_fields = {f.name for f in _dc.fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in valid_fields})
 
     @classmethod
     def from_json(cls, json_str: str) -> 'ObserverState':

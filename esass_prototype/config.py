@@ -50,7 +50,17 @@ class ExportConfig:
     obsidian_vault: Optional[str] = None
     auto_export: bool = False
     export_format: str = "markdown"
-    export_dir: str = r"C:\workspace\leo-vault"
+    export_dir: str = "./obsidian_export"
+
+
+@dataclass
+class ProbeSystemConfig:
+    """Configuration bridge to esass core probe system (esass.probes.config)."""
+    enabled: bool = True
+    data_dir: str = "./data"
+    buffer_size: int = 100
+    flush_interval: float = 5.0
+    sample_rate: float = 1.0
 
 
 @dataclass
@@ -61,6 +71,7 @@ class ESASSConfig:
     pattern_detection: PatternDetectionConfig = field(default_factory=PatternDetectionConfig)
     skill_generation: SkillGenerationConfig = field(default_factory=SkillGenerationConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    probes: ProbeSystemConfig = field(default_factory=ProbeSystemConfig)
 
     def to_dict(self) -> dict:
         """Convert to dictionary"""
@@ -74,7 +85,8 @@ class ESASSConfig:
             storage=StorageConfig(**data.get('storage', {})),
             pattern_detection=PatternDetectionConfig(**data.get('pattern_detection', {})),
             skill_generation=SkillGenerationConfig(**data.get('skill_generation', {})),
-            export=ExportConfig(**data.get('export', {}))
+            export=ExportConfig(**data.get('export', {})),
+            probes=ProbeSystemConfig(**data.get('probes', {})),
         )
 
 
