@@ -174,6 +174,10 @@ class SkillManifest:
     success_rate: float = 0.0
     skill_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    funding: Optional[Dict[str, Any]] = None
+    parent_skill_ids: List[str] = field(default_factory=list)
+    child_skill_ids: List[str] = field(default_factory=list)
+    derived_from_unification: Optional[str] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -188,8 +192,11 @@ class SkillManifest:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'SkillManifest':
-        """Create from dictionary"""
-        data_copy = data.copy()
+        """Create from dictionary, filtering unknown keys for forward-compatibility"""
+        import dataclasses as _dc
+        valid_fields = {f.name for f in _dc.fields(cls)}
+
+        data_copy = {k: v for k, v in data.items() if k in valid_fields or k == 'triggers'}
         triggers_data = data_copy.pop('triggers', [])
 
         # Handle both string triggers and TriggerCondition objects
