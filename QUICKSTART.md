@@ -1,16 +1,26 @@
 # ESASS Quick Start Guide
 
-Get up and running with the ESASS prototype in 5 minutes.
+Get up and running with the ESASS prototype in minutes.
 
 ## Prerequisites
 
 - Python 3.8 or higher
-- Git (optional, for version control)
+- Git
 - Terminal/Command prompt access
+- Node.js 22+ (for OpenClaw plugin / ClawHub CLI)
 
 ## Step 1: Installation
 
-### Install uv (Python Package Manager)
+### Clone the Repository
+
+```bash
+git clone https://github.com/MN88/esass.git
+cd esass
+```
+
+### Install uv (Recommended)
+
+[uv](https://docs.astral.sh/uv/) is the recommended package manager for ESASS.
 
 ```bash
 # On Windows (PowerShell)
@@ -25,25 +35,54 @@ pip install uv
 
 ### Install ESASS Prototype
 
+**Using uv (recommended)**:
+
 ```bash
-# Navigate to ESASS directory
-cd C:\workspace\esass
+uv sync
+uv run pytest tests/ -v
+```
 
-# Install package with dev dependencies (recommended)
-pip install -e ".[dev]"
+**Using pip**:
 
-# Or install dependencies separately
-pip install pytest pytest-cov ruff click python-dateutil
+```bash
+# Install the package in editable mode
+pip install -e .
+
+# Install dev dependencies separately (pytest, coverage, linting)
+pip install pytest pytest-cov ruff
 
 # Verify installation
 python -m pytest tests/ -v
 ```
 
-**Alternative using uv**:
+### Install OpenClaw Plugin Dependencies
+
+The OpenClaw plugin lives in `openclaw-plugin/` and depends on the core
+`esass_prototype` package. No separate install step is needed once the root
+package is installed:
+
 ```bash
-pip install uv
-uv sync
-uv run pytest tests/ -v
+# Verify the plugin tests pass
+pytest openclaw-plugin/tests/ -v
+```
+
+### Install OpenClaw + ClawHub CLI (Optional)
+
+Required only if you plan to publish skills to ClawHub:
+
+```bash
+# OpenClaw gateway
+openclaw --help
+
+# ClawHub CLI
+npm i -g clawhub
+clawhub login
+```
+
+Verify the CLI is available:
+
+```bash
+uv run esass --help
 ```
 
 Expected output:
@@ -393,18 +432,20 @@ events = simulator.generate_multiple_sessions(count=50, days=7)
 ### uv command not found
 
 ```bash
-# Add uv to PATH (Windows)
-# Restart terminal after installation
+# Restart your terminal after installation so PATH is updated
 
-# Or use full path
-C:\Users\YourName\.cargo\bin\uv.exe run esass --help
+# Or use full path (Windows)
+%USERPROFILE%\.cargo\bin\uv.exe run esass --help
+
+# Or use full path (macOS/Linux)
+~/.cargo/bin/uv run esass --help
 ```
 
 ### Module not found errors
 
 ```bash
-# Ensure you're in the ESASS directory
-cd C:\workspace\ESASS
+# Ensure you're in the esass directory
+cd esass
 
 # Reinstall dependencies
 uv sync
@@ -459,9 +500,11 @@ Key files to understand:
 ### Read the Documentation
 
 - **README.md**: Full prototype documentation
-- **esass/esass-specification_v0.01.md**: Complete system specification
-- **esass/ARCHITECTURE.md**: Architecture details
-- **esass/CLAUDE.md**: Development guide
+- **ARCHITECTURE.md**: Architecture details
+- **CLAUDE.md**: Development guide
+- **openclaw-plugin/README.md**: OpenClaw integration overview
+- **openclaw-plugin/IMPLEMENTATION_GUIDE.md**: Plugin implementation details
+- **TEST_RESULTS.md**: Comprehensive test results and benchmarks
 
 ### Extend the Prototype
 
@@ -471,6 +514,7 @@ Add new features:
 - Additional pattern detection algorithms
 - Custom skill templates
 - Different export formats
+- New OpenClaw plugin adapters
 
 ### Test the Real-Time Event Capture System (NEW!)
 
@@ -524,13 +568,15 @@ Data directory: data_opencode
 
 #### Run Probe System Tests
 
-**Current Status**: ✅ All 41 tests passing (verified 2026-02-03)
-**Execution Time**: 2.02 seconds
+**Current Status**: 118 tests passing (41 core + 77 OpenClaw plugin)
 **Success Rate**: 100%
 
 ```bash
-# Run all tests (41 tests total)
+# Run all core tests (41 tests)
 pytest tests/ -v
+
+# Run OpenClaw plugin tests (77 tests)
+pytest openclaw-plugin/tests/ -v
 
 # Run probe tests only (27 tests)
 pytest tests/test_probes.py -v
@@ -541,15 +587,18 @@ pytest tests/test_opencode_integration.py -v
 # Run end-to-end pipeline test (1 test)
 pytest tests/test_e2e_pipeline.py -v
 
+# Run OpenClaw donation tests (17 tests)
+pytest openclaw-plugin/tests/test_donation.py -v
+
 # Run with coverage report
-pytest tests/ --cov=esass.probes --cov=esass_prototype --cov=examples --cov-report=html
+pytest tests/ openclaw-plugin/tests/ --cov=esass.probes --cov=esass_prototype --cov-report=html
 
 # Run specific probe tests
 pytest tests/test_probes.py::TestToolCallProbe -v
 ```
 
 **Detailed test results**: See [TEST_RESULTS.md](TEST_RESULTS.md) for:
-- Complete test breakdown (27 tests across 5 categories)
+- Complete test breakdown (27 probe tests across 5 categories)
 - Event capture examples (57 events, 8 probe types)
 - Performance benchmarks (all targets exceeded)
 - Integration readiness assessment
@@ -561,10 +610,10 @@ pytest tests/test_probes.py::TestToolCallProbe -v
 cat esass/probes/README.md
 
 # View integration plan
-cat INTEGRATION_PLAN.md
+cat _archive/INTEGRATION_PLAN.md
 
 # View implementation summary
-cat PROBE_IMPLEMENTATION_SUMMARY.md
+cat _archive/PROBE_IMPLEMENTATION_SUMMARY.md
 ```
 
 ### Integrate with Real System
@@ -647,6 +696,17 @@ export ESASS_DECISION_PROBE_ENABLED=true
 # Pipeline tuning
 export ESASS_BUFFER_SIZE=100
 export ESASS_FLUSH_INTERVAL=5.0
+
+# Donation settings
+export ESASS_DONATION_ENABLED=true
+export ESASS_PAYPAL_USERNAME=mrstanton81
+export ESASS_PAYPAL_LINK=https://paypal.me/mrstanton81
+export ESASS_PAYPAL_CRYPTO_ENABLED=true
+export ESASS_PAYPAL_CRYPTO_LINK=https://paypal.me/mrstanton81
+export ESASS_PROJECT_NAME=ESASS
+export ESASS_PROJECT_URL=https://github.com/MN88/esass
+export ESASS_DONATION_SHOW_ON_ACTIVATION=true
+export ESASS_DONATION_SHOW_IN_METADATA=true
 ```
 
 #### Performance Benchmarks
