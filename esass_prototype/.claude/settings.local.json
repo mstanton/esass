@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(python -m examples.claude_code_integration:*)",
+      "Bash(python -m examples.verify_realtime:*)",
+      "Bash(python -m pytest:*)"
+    ]
+  }
+}

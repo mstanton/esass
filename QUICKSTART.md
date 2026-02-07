@@ -2,6 +2,35 @@
 
 Get up and running with the ESASS prototype in minutes.
 
+## Architecture Overview
+
+```mermaid
+graph LR
+    subgraph "Input"
+        SIM[Event Simulator]
+        CC[Claude Code]
+    end
+
+    subgraph "ESASS Core"
+        OBS[Observation] --> LOG[(Log Store)]
+        LOG --> DET[Pattern Detection]
+        DET --> GEN[Skill Genesis]
+        GEN --> SKL[(Skill Store)]
+    end
+
+    subgraph "Output"
+        EXP[Obsidian Export]
+    end
+
+    SIM --> OBS
+    CC -.-> OBS
+    LOG & SKL --> EXP
+```
+
+For detailed architecture diagrams, see:
+- [esass_prototype/README.md](esass_prototype/README.md) - Full documentation with Mermaid diagrams
+- [esass_prototype/ARCHITECTURE.md](esass_prototype/ARCHITECTURE.md) - Component architecture details
+
 ## Prerequisites
 
 - Python 3.8 or higher
@@ -499,9 +528,9 @@ Key files to understand:
 
 ### Read the Documentation
 
-- **README.md**: Full prototype documentation
-- **ARCHITECTURE.md**: Architecture details
-- **CLAUDE.md**: Development guide
+- **[esass_prototype/README.md](esass_prototype/README.md)**: Full prototype documentation with architecture diagrams
+- **[esass_prototype/ARCHITECTURE.md](esass_prototype/ARCHITECTURE.md)**: Detailed component architecture with Mermaid diagrams
+- **CLAUDE.md**: Development guide and coding standards
 - **openclaw-plugin/README.md**: OpenClaw integration overview
 - **openclaw-plugin/IMPLEMENTATION_GUIDE.md**: Plugin implementation details
 - **TEST_RESULTS.md**: Comprehensive test results and benchmarks
@@ -705,7 +734,7 @@ export ESASS_PAYPAL_LINK=https://paypal.me/mrstanton81
 export ESASS_PAYPAL_CRYPTO_ENABLED=true
 export ESASS_PAYPAL_CRYPTO_LINK=https://paypal.me/mrstanton81
 export ESASS_PROJECT_NAME=ESASS
-export ESASS_PROJECT_URL=https://github.com/MN88/esass
+export ESASS_PROJECT_URL=https://github.com/mstanton/esass
 export ESASS_DONATION_SHOW_ON_ACTIVATION=true
 export ESASS_DONATION_SHOW_IN_METADATA=true
 ```

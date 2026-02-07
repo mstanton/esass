@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python esass_cli.py test:*)",
+      "Bash(python esass_cli.py stats:*)",
+      "Bash(python esass_cli.py:*)"
+    ]
+  }
+}
