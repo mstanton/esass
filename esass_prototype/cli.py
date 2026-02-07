@@ -30,8 +30,8 @@ def esass():
 
 
 @esass.command("observe-start")
-@click.option('--sessions', default=20, help='Sessions per day to simulate')
-@click.option('--days', default=14, help='Days of history to generate')
+@click.option("--sessions", default=20, help="Sessions per day to simulate")
+@click.option("--days", default=14, help="Days of history to generate")
 def observe_start(sessions, days):
     """Start observation mode (generate simulated data)"""
     config = get_config()
@@ -48,14 +48,8 @@ def observe_start(sessions, days):
     logger.start_observation()
 
     # Generate simulated sessions
-    with click.progressbar(
-        length=sessions * days,
-        label='Generating sessions'
-    ) as bar:
-        entries = simulator.generate_multiple_sessions(
-            count=sessions * days,
-            days=days
-        )
+    with click.progressbar(length=sessions * days, label="Generating sessions") as bar:
+        entries = simulator.generate_multiple_sessions(count=sessions * days, days=days)
         bar.update(sessions * days)
 
     # Log entries
@@ -82,7 +76,9 @@ def observe_stop():
 
 
 @esass.command("analyze")
-@click.option('--days', default=None, type=int, help='Days of data to analyze (default: all)')
+@click.option(
+    "--days", default=None, type=int, help="Days of data to analyze (default: all)"
+)
 def analyze(days):
     """Analyze logs and detect patterns"""
     config = get_config()
@@ -108,7 +104,7 @@ def analyze(days):
     detector = TemporalPatternDetector(
         min_support=config.pattern_detection.min_support,
         min_confidence=config.pattern_detection.min_confidence,
-        min_stability_days=config.pattern_detection.min_stability_days
+        min_stability_days=config.pattern_detection.min_stability_days,
     )
 
     patterns = detector.detect_patterns(logs)
@@ -132,7 +128,9 @@ def analyze(days):
         for i, pattern in enumerate(patterns[:5], 1):
             status = "[OK]" if pattern.skill_candidate else "•"
             click.echo(f"  {status} {i}. {pattern.description}")
-            click.echo(f"     Support: {pattern.support}, Confidence: {pattern.confidence:.0%}, Stability: {pattern.stability_days}d")
+            click.echo(
+                f"     Support: {pattern.support}, Confidence: {pattern.confidence:.0%}, Stability: {pattern.stability_days}d"
+            )
 
 
 @esass.command("generate-skills")
@@ -153,7 +151,7 @@ def generate_skills():
     evaluator = SkillCandidacyEvaluator(
         min_support=config.pattern_detection.min_support,
         min_confidence=config.pattern_detection.min_confidence,
-        min_stability_days=config.pattern_detection.min_stability_days
+        min_stability_days=config.pattern_detection.min_stability_days,
     )
 
     candidates = evaluator.filter_candidates(patterns)
@@ -180,7 +178,7 @@ def generate_skills():
 
 
 @esass.command("export")
-@click.option('--vault', type=click.Path(), help='Path to Obsidian vault')
+@click.option("--vault", type=click.Path(), help="Path to Obsidian vault")
 def export(vault):
     """Export to Obsidian vault"""
     config = get_config()
@@ -203,7 +201,9 @@ def export(vault):
     patterns = pattern_store.load_all()
     skills = skill_store.load_all()
 
-    click.echo(f"   Loaded {len(logs)} logs, {len(patterns)} patterns, {len(skills)} skills")
+    click.echo(
+        f"   Loaded {len(logs)} logs, {len(patterns)} patterns, {len(skills)} skills"
+    )
 
     # Export
     exporter = ObsidianExporter(vault_path)
@@ -214,9 +214,9 @@ def export(vault):
 
 
 @esass.command("pipeline")
-@click.option('--sessions', default=20, help='Sessions per day to simulate')
-@click.option('--days', default=14, help='Days of history to generate')
-@click.option('--vault', type=click.Path(), help='Path to Obsidian vault')
+@click.option("--sessions", default=20, help="Sessions per day to simulate")
+@click.option("--days", default=14, help="Days of history to generate")
+@click.option("--vault", type=click.Path(), help="Path to Obsidian vault")
 def pipeline(sessions, days, vault):
     """Run full pipeline: observe -> analyze -> generate -> export"""
     click.echo("==> Running full ESASS pipeline\n")
@@ -272,25 +272,46 @@ def stats():
     click.echo(f"  Total entries: {log_stats.get('total_entries', 0)}")
     click.echo(f"  Total sessions: {log_stats.get('total_sessions', 0)}")
 
-    if log_stats.get('date_range'):
-        click.echo(f"  Date range: {log_stats['date_range']['start'][:10]} to {log_stats['date_range']['end'][:10]}")
+    if log_stats.get("date_range"):
+        click.echo(
+            f"  Date range: {log_stats['date_range']['start'][:10]} to {log_stats['date_range']['end'][:10]}"
+        )
 
     click.echo("\nPatterns:")
     click.echo(f"  Total patterns: {pattern_stats.get('total_patterns', 0)}")
     click.echo(f"  Skill candidates: {pattern_stats.get('skill_candidates', 0)}")
 
-    if pattern_stats.get('avg_support'):
+    if pattern_stats.get("avg_support"):
         click.echo(f"  Avg support: {pattern_stats['avg_support']:.1f}")
         click.echo(f"  Avg confidence: {pattern_stats['avg_confidence']:.1%}")
 
     click.echo("\nSkills:")
     click.echo(f"  Total skills: {skill_stats.get('total_skills', 0)}")
 
-    if skill_stats.get('by_status'):
+    if skill_stats.get("by_status"):
         click.echo("  By status:")
-        for status, count in skill_stats['by_status'].items():
+        for status, count in skill_stats["by_status"].items():
             click.echo(f"    {status}: {count}")
 
 
-if __name__ == '__main__':
+@esass.command("run", context_settings={"ignore_unknown_options": True})
+@click.argument("command", nargs=-1, required=True)
+def run(command):
+    """Run an interactive command within the ESASS TUI wrapper."""
+    try:
+        from esass_prototype.tui.app import ESASSApp
+    except ImportError as e:
+        click.echo(f"Error importing TUI: {e}")
+        click.echo("Please ensure 'textual' is installed.")
+        return
+
+    # Join command parts if it's a tuple from nargs=-1
+    # But ProcessManager expects a list, so we keep it as tuple/list
+    cmd_list = list(command)
+
+    app = ESASSApp(command=cmd_list)
+    app.run()
+
+
+if __name__ == "__main__":
     esass()
