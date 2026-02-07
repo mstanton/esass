@@ -313,5 +313,147 @@ def run(command):
     app.run()
 
 
+@esass.command("watch")
+def watch():
+    """Realtime monitoring of tool usage (alias for monitor)."""
+    ctx = click.get_current_context()
+    ctx.invoke(monitor)
+
+
+@esass.command("monitor")
+def monitor():
+    """Realtime monitoring of tool usage."""
+    from esass_prototype.analysis.realtime import Colors, RealtimeDisplay, Sym
+    import json
+    import time
+
+    config = get_config()
+    data_dir = get_data_dir(config)
+    log_dir = data_dir / "logs"
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = log_dir / f"log_{today}.jsonl"
+
+    # Ensure log dir exists
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    RealtimeDisplay.print_header("ESASS Realtime Monitor")
+    click.echo(f"  Watching: {log_file}")
+    click.echo(f"  Press {Colors.BOLD}Ctrl+C{Colors.END} to stop\n")
+    click.echo(f"{Colors.DIM}{'─' * 60}{Colors.END}")
+
+    # Track file position
+    if log_file.exists():
+        with open(log_file, "r", encoding="utf-8") as f:
+            f.seek(0, 2)
+            position = f.tell()
+    else:
+        position = 0
+
+    event_count = 0
+
+    try:
+        while True:
+            if log_file.exists():
+                with open(log_file, "r", encoding="utf-8") as f:
+                    f.seek(position)
+                    new_lines = f.readlines()
+                    position = f.tell()
+
+                for line in new_lines:
+                    try:
+                        event = json.loads(line)
+                        click.echo(RealtimeDisplay.format_event(event))
+                        event_count += 1
+                    except:
+                        pass
+
+            time.sleep(0.3)
+
+    except KeyboardInterrupt:
+        click.echo(f"\n{Colors.DIM}{'─' * 60}{Colors.END}")
+        click.echo(
+            f"\n  {Colors.GREEN}{Sym.CHECK}{Colors.END} Captured {event_count} events this session"
+        )
+
+
+@esass.command("tail")
+@click.argument("n", type=int, default=20)
+def tail(n):
+    """Show last N events."""
+    from esass_prototype.analysis.realtime import RealtimeDisplay, Colors
+    import json
+
+    config = get_config()
+    data_dir = get_data_dir(config)
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = data_dir / "logs" / f"log_{today}.jsonl"
+
+    if not log_file.exists():
+        click.echo(f"\n{Colors.YELLOW}No events found today.{Colors.END}\n")
+        return
+
+    events = []
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    events.append(json.loads(line))
+                except:
+                    pass
+    except Exception:
+        pass
+
+    recent = events[-n:]
+
+    RealtimeDisplay.print_header(f"Last {len(recent)} Events")
+
+    for event in recent:
+        click.echo(RealtimeDisplay.format_event(event))
+
+    click.echo()
+
+
+@esass.command("setup")
+def setup():
+    """Show setup instructions."""
+    from esass_prototype.analysis.realtime import Colors
+    import esass.hooks.esass_hook as hook_module
+
+    hook_path = Path(hook_module.__file__).resolve()
+    config = get_config()
+    data_dir = get_data_dir(config)
+
+    RealtimeDisplay.print_header("ESASS Setup")
+
+    click.echo(f"""
+  {Colors.BOLD}1. Configure Claude Code Hook{Colors.END}
+
+     Add this to {Colors.CYAN}~/.claude/hooks.json{Colors.END}:
+
+     {Colors.DIM}{{
+       "hooks": {{
+         "PostToolUse": [{{
+           "command": "python {hook_path}",
+           "timeout": 5000
+         }}]
+       }}
+     }}{Colors.END}
+
+  {Colors.BOLD}2. Configuration{Colors.END}
+
+     Data will be stored in: {Colors.CYAN}{data_dir}{Colors.END}
+     (Set ESASS_DATA_DIR environment variable to change)
+
+  {Colors.BOLD}3. Monitor{Colors.END}
+
+     In a separate terminal, run:
+     {Colors.GREEN}esass watch{Colors.END}
+
+  {Colors.BOLD}4. Use Normally{Colors.END}
+
+     All tool usage will be captured automatically.
+""")
+
+
 if __name__ == "__main__":
     esass()

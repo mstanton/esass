@@ -28,6 +28,7 @@ graph LR
 ```
 
 For detailed architecture diagrams, see:
+
 - [esass_prototype/README.md](esass_prototype/README.md) - Full documentation with Mermaid diagrams
 - [esass_prototype/ARCHITECTURE.md](esass_prototype/ARCHITECTURE.md) - Component architecture details
 
@@ -129,6 +130,9 @@ Commands:
   observe-stop     Stop observation mode
   pipeline         Run full pipeline
   stats            Show system statistics
+  setup            Show setup instructions
+  watch            Realtime event monitor
+  tail             Show recent events
 ```
 
 ## Step 2: Run the Demo Pipeline
@@ -323,6 +327,16 @@ uv run esass export
 
 # Export to specific vault
 uv run esass export --vault C:\Users\YourName\Documents\ObsidianVault\ESASS
+```
+
+### Realtime Monitoring
+
+```bash
+# Monitor events as they happen
+uv run esass watch
+
+# Check the last few events
+uv run esass tail 10
 ```
 
 ## Step 5: Integration with Obsidian (Optional)

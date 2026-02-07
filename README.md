@@ -32,6 +32,9 @@ ruff check .
 
 # Verify installation
 python -m esass_prototype.cli --help
+
+# Configure hooks
+uv run esass setup
 ```
 
 **Note**: If using `uv` (modern Python package manager):
@@ -662,6 +665,19 @@ uv run esass observe-start
 
 # Stop observation
 uv run esass observe-stop
+```
+
+### Real-Time Monitoring
+
+```bash
+# Watch events in real-time
+uv run esass watch
+
+# Show last N events
+uv run esass tail 20
+
+# View setup instructions
+uv run esass setup
 ```
 
 ### Analyze Logs
