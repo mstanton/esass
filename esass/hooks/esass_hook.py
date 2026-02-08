@@ -227,31 +227,19 @@ def main():
     # Initialize Probes if available
     registry = None
     capture_pipeline = CapturePipeline()
-    state_file = ESASS_DATA_DIR / "state" / "probe_state.pkl"
 
-    if PROBES_AVAILABLE:
-        # Try to load existing registry from pickle
-        if state_file.exists():
-            try:
-                with open(state_file, "rb") as f:
-                    registry = pickle.load(f)
-                    # Restore transient pipeline
-                    registry.event_pipeline = capture_pipeline
-            except:
-                registry = None
-
-        # Create new if loading failed
-        if registry is None:
-            try:
-                config = ESASSProbeSystemConfig()
-                config.data_dir = str(ESASS_DATA_DIR)
-                probes = create_default_probes(config)
-                registry = ProbeRegistry()
-                registry.event_pipeline = capture_pipeline
-                for probe in probes:
-                    registry.register(probe)
-            except Exception:
-                registry = None
+    # Temporarily disable probes to debug basic hook functionality
+    # if PROBES_AVAILABLE:
+    #     try:
+    #         config = ESASSProbeSystemConfig()
+    #         config.data_dir = str(ESASS_DATA_DIR)
+    #         probes = create_default_probes(config)
+    #         registry = ProbeRegistry()
+    #         registry.event_pipeline = capture_pipeline
+    #         for probe in probes:
+    #             registry.register(probe)
+    #     except Exception:
+    #         registry = None
 
     try:
         input_data = sys.stdin.read()
@@ -260,13 +248,19 @@ def main():
 
         hook_data = json.loads(input_data)
 
+        # Debug: log raw input structure
+        debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
+        with open(debug_log, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().isoformat()}] Raw keys: {list(hook_data.keys())}\n")
+
         # Extract fields from Claude Code hook
-        tool_name = hook_data.get("tool_name", "unknown")
-        tool_input = hook_data.get("tool_input", {})
-        tool_output = hook_data.get("tool_output", "")
-        # Claude Code results often indicate success/failure
-        success = hook_data.get("success", True)
+        # Claude Code sends: tool_name, tool_input, tool_result, error (optional)
+        tool_name = hook_data.get("tool_name", hook_data.get("name", "unknown"))
+        tool_input = hook_data.get("tool_input", hook_data.get("input", {}))
+        tool_output = hook_data.get("tool_result", hook_data.get("tool_output", ""))
+        # Check for error in result or explicit error field
         error = hook_data.get("error")
+        success = error is None
         session_id = get_session_id()
 
         if not tool_name or tool_name == "unknown":
@@ -327,30 +321,18 @@ def main():
         # 4. Update sequence tracking
         update_sequence_state(tool_name, context)
 
-        # 5. Persist probe state
-        if registry:
-            try:
-                # Remove non-pickleable pipeline reference
-                registry.event_pipeline = None
-                with open(state_file, "wb") as f:
-                    pickle.dump(registry, f)
-            except Exception as pe:
-                try:
-                    debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
-                    with open(debug_log, "a", encoding="utf-8") as f:
-                        f.write(
-                            f"[{datetime.now().isoformat()}] Pickle Error: {str(pe)}\n"
-                        )
-                except:
-                    pass
+        # 5. Log success for debugging
+        with open(debug_log, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().isoformat()}] Captured {tool_name}\n")
 
     except Exception as e:
         try:
             debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
             with open(debug_log, "a", encoding="utf-8") as f:
-                f.write(
-                    f"[{datetime.now().isoformat()}] Error in hook main: {str(e)}\n"
-                )
+                f.write(f"[{datetime.now().isoformat()}] Error: {str(e)}\n")
+                # Log full input for debugging
+                if 'input_data' in dir():
+                    f.write(f"[{datetime.now().isoformat()}] Input: {input_data[:500]}\n")
             log_event("hook_error", {"error": str(e)})
         except:
             pass

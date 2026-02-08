@@ -190,6 +190,10 @@ class C:
     HIDE_CURSOR = "\033[?25l"  # Hide cursor
     SHOW_CURSOR = "\033[?25h"  # Show cursor
 
+    # Alternate screen buffer (true double-buffering)
+    ALT_BUFFER_ON = "\033[?1049h"  # Switch to alternate buffer
+    ALT_BUFFER_OFF = "\033[?1049l"  # Switch back to main buffer
+
     # Background colors
     BG_RED = "\033[41m"
     BG_GREEN = "\033[42m"
@@ -655,25 +659,78 @@ def format_event_line(event, max_width=60):
 # ============================================================================
 
 
+import re
+_ANSI_ESCAPE_RE = re.compile(r'\033\[[0-9;]*[a-zA-Z]')
+
+
+class FrameBuffer:
+    """Double-buffer for flicker-free rendering."""
+
+    def __init__(self):
+        self.lines = []
+        self.term_width = 110
+        self.term_height = 55
+
+    def set_size(self, width, height):
+        self.term_width = width
+        self.term_height = height
+
+    def _visible_len(self, text):
+        """Get visible length of text (excluding ANSI codes)."""
+        return len(_ANSI_ESCAPE_RE.sub('', text))
+
+    def add(self, text=""):
+        """Add a line to the buffer, padding to terminal width."""
+        # Strip existing CLEAR_LINE codes if any
+        clean_text = text.replace(C.CLEAR_LINE, "")
+        # Pad line to terminal width to fully overwrite previous content
+        visible_len = self._visible_len(clean_text)
+        padding = max(0, self.term_width - visible_len - 1)
+        self.lines.append(clean_text + " " * padding)
+
+    def render(self):
+        """Return complete frame as single string."""
+        # Pad to fill screen height to prevent scrolling artifacts
+        while len(self.lines) < self.term_height - 2:
+            self.lines.append(" " * (self.term_width - 1))
+        # Join all lines and output in one write
+        return "\n".join(self.lines)
+
+    def clear(self):
+        self.lines = []
+
+
+# Global frame buffer
+_frame_buffer = FrameBuffer()
+
+
 def print_line(text=""):
-    """Print a line and clear to end (prevents artifacts)."""
-    print(f"{text}{C.CLEAR_LINE}")
+    """Add a line to the frame buffer."""
+    _frame_buffer.add(text)
 
 
 def render_dashboard(state: ESASSState, first_render=False, status_message=None):
     """Render the complete unified dashboard."""
-    # First render clears screen, subsequent just move cursor home
-    if first_render:
-        print(C.CLEAR_SCREEN, end="")
-    print(C.HOME + C.HIDE_CURSOR, end="")
+    global _frame_buffer
+    _frame_buffer.clear()
 
-    # Get terminal width (default 100)
+    # Get terminal size
     try:
         import shutil
-
-        term_width = shutil.get_terminal_size().columns
+        term_size = shutil.get_terminal_size()
+        term_width = term_size.columns
+        term_height = term_size.lines
     except Exception:
-        term_width = 100
+        term_width = 110
+        term_height = 55
+
+    _frame_buffer.set_size(term_width, term_height)
+
+    # First render switches to alternate buffer and clears
+    prefix = C.HIDE_CURSOR
+    if first_render:
+        prefix = C.ALT_BUFFER_ON + C.HIDE_CURSOR + C.CLEAR_SCREEN
+    prefix += C.HOME
 
     # Check sync status
     is_synced, sync_msg = check_sync_status()
@@ -901,8 +958,10 @@ def render_dashboard(state: ESASSState, first_render=False, status_message=None)
         f"  {C.DIM}{shortcuts}{last_event_ago} │ {len(events_to_show)}/{len(state.recent_events)} events │ Ctrl+C to exit{C.RESET}"
     )
 
-    # Show cursor at end
-    print(C.SHOW_CURSOR, end="", flush=True)
+    # Flush the entire frame buffer in one write (flicker-free)
+    frame = _frame_buffer.render()
+    sys.stdout.write(prefix + frame + "\n" + C.SHOW_CURSOR)
+    sys.stdout.flush()
 
 
 # ============================================================================
@@ -954,7 +1013,8 @@ def main():
         except Exception:
             pass
 
-        print(C.SHOW_CURSOR + C.CLEAR_SCREEN, end="")
+        # Switch back from alternate buffer and restore cursor
+        print(C.SHOW_CURSOR + C.ALT_BUFFER_OFF, end="")
         print(f"\n{C.GREEN}{Sym.CHECK} Dashboard stopped{C.RESET}")
         print(f"  Total events: {state.total_events}")
         print(f"  Patterns tracked: {len(state.sequences)}")
