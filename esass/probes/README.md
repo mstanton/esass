@@ -123,6 +123,7 @@ def execute_tool(tool_name, parameters, context):
 Specialized observers for different event types:
 
 #### **ToolCallProbe** (`tool_probe.py`)
+
 Captures tool invocations and outcomes.
 
 ```python
@@ -140,12 +141,14 @@ probe = ToolCallProbe(
 ```
 
 **Features**:
+
 - Parameter sanitization (removes sensitive data)
 - Result summarization
 - Causality tracking
 - Sequence detection (ToolSequenceDetector variant)
 
 #### **ReasoningProbe** (`reasoning_probe.py`)
+
 Captures Claude's thinking and hypotheses.
 
 ```python
@@ -163,11 +166,13 @@ probe = ReasoningProbe(
 ```
 
 **Features**:
+
 - Confidence estimation from language
 - Evidence extraction ("because X", "since Y")
 - Causal reasoning detection (CausalReasoningProbe variant)
 
 #### **DecisionProbe** (`decision_probe.py`)
+
 Captures decision points and rationale.
 
 ```python
@@ -185,12 +190,51 @@ probe = DecisionProbe(
 ```
 
 **Features**:
+
 - Tradeoff analysis detection (TradeoffAnalysisProbe variant)
 - Confidence estimation from rationale
 
-### Registry
+### ReliabilityProbe (`reliability_probe.py`)
 
-Central coordination for all probes.
+Tracks long-term tool stability and error patterns.
+
+```python
+from esass.probes import ReliabilityProbe
+
+probe = ReliabilityProbe(
+    window_size=50,       # Track last 50 calls per tool
+    alert_threshold=3     # Alert after 3 consecutive failures
+)
+
+# Observes:
+# - tool_call_complete: Success/failure rates
+# - reliability_alert: Consistent failure streaks
+```
+
+**Features**:
+
+- Interactive success rate tracking
+- Consecutive failure alerting (circuit breaker pattern)
+- Error type distribution analysis
+
+### FieldBoundaryProbe (`field_boundary_probe.py`)
+
+Monitors agent interaction with protected project zones.
+
+```python
+from esass.probes import FieldBoundaryProbe
+
+probe = FieldBoundaryProbe()
+
+# Observes:
+# - boundary_action: Activity in CORE, TRUSTED, LEARNING, or EXPLORATION zones
+```
+
+**Features**:
+
+- Implements "Protection Gradient" concept
+- Classification of file paths into risk zones
+- Risk assessment based on action (Read vs Write) and zone
 
 ```python
 from esass.probes import ProbeRegistry
@@ -210,6 +254,7 @@ print(f"Events processed: {stats['total_events_received']}")
 ```
 
 **Features**:
+
 - Automatic event routing to interested probes
 - Error isolation (one probe failure doesn't crash system)
 - Performance tracking
@@ -240,6 +285,7 @@ pipeline.shutdown(timeout=10.0)
 ```
 
 **Variants**:
+
 - `AsyncEventPipeline`: Adds sampling support
 - `PriorityEventPipeline`: Priority-based processing
 
@@ -303,21 +349,25 @@ Tested on typical hardware (Intel i7, 16GB RAM):
 ### Optimization Tips
 
 1. **Increase buffer size** for high-volume scenarios:
+
    ```bash
    export ESASS_BUFFER_SIZE=500
    ```
 
 2. **Use sampling** to reduce storage:
+
    ```bash
    export ESASS_SAMPLE_RATE=0.1  # Keep 10% of events
    ```
 
 3. **Disable verbose probes** in production:
+
    ```bash
    export ESASS_REASONING_PROBE_ENABLED=false
    ```
 
 4. **Tune flush interval** based on latency tolerance:
+
    ```bash
    export ESASS_FLUSH_INTERVAL=10.0  # Less frequent flushes
    ```
@@ -373,6 +423,7 @@ python examples/claude_code_integration.py
 ```
 
 Expected output:
+
 ```
 ======================================================================
 ESASS Claude Code Integration Example
@@ -456,16 +507,19 @@ export ESASS_LOG_LEVEL=DEBUG
 ### Events not being captured
 
 **Check**: Is the registry started?
+
 ```python
 registry.start()  # Must call this
 ```
 
 **Check**: Are probes enabled?
+
 ```python
 config.tool_probe.enabled = True
 ```
 
 **Check**: Does probe observe this event type?
+
 ```python
 probe.can_observe('tool_call_start')  # Should return True
 ```
@@ -473,12 +527,14 @@ probe.can_observe('tool_call_start')  # Should return True
 ### High memory usage
 
 **Solution**: Reduce buffer size or increase flush frequency
+
 ```bash
 export ESASS_BUFFER_SIZE=50
 export ESASS_FLUSH_INTERVAL=2.0
 ```
 
 **Solution**: Enable sampling
+
 ```bash
 export ESASS_SAMPLE_RATE=0.5  # Keep 50% of events
 ```
@@ -486,6 +542,7 @@ export ESASS_SAMPLE_RATE=0.5  # Keep 50% of events
 ### Events being dropped
 
 **Check**: Queue is full (backpressure)
+
 ```python
 stats = pipeline.get_stats()
 if stats['total_dropped'] > 0:
@@ -496,6 +553,7 @@ if stats['total_dropped'] > 0:
 ### Probe errors
 
 **Check**: Error count in statistics
+
 ```python
 stats = registry.get_stats()
 for probe, probe_stats in stats['probes'].items():
@@ -541,12 +599,14 @@ class Probe(ABC):
 ## Roadmap
 
 ### v0.2.0 (Planned)
+
 - [ ] Real-time pattern detection integration
 - [ ] Skill execution tracking
 - [ ] Advanced filtering (regex, predicates)
 - [ ] Distributed deployment support
 
 ### v0.3.0 (Planned)
+
 - [ ] Vector embedding generation for events
 - [ ] Semantic clustering probes
 - [ ] Anomaly detection probes

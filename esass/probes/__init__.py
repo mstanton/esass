@@ -33,15 +33,19 @@ from esass.probes.pipeline import EventPipeline
 from esass.probes.reasoning_probe import ReasoningProbe
 from esass.probes.registry import ProbeRegistry
 from esass.probes.tool_probe import ToolCallProbe
+from esass.probes.reliability_probe import ReliabilityProbe
+from esass.probes.field_boundary_probe import FieldBoundaryProbe
 
 __all__ = [
-    'Probe',
-    'ProbeContext',
-    'ProbeRegistry',
-    'ToolCallProbe',
-    'ReasoningProbe',
-    'DecisionProbe',
-    'EventPipeline',
+    "Probe",
+    "ProbeContext",
+    "ProbeRegistry",
+    "ToolCallProbe",
+    "ReasoningProbe",
+    "DecisionProbe",
+    "EventPipeline",
+    "ReliabilityProbe",
+    "FieldBoundaryProbe",
 ]
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"
