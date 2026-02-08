@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ESASS Session Startup
+
+**At the start of each Claude Code session in this project, display the ESASS sync status:**
+
+```bash
+python esass/hooks/esass_notify.py startup
+```
+
+This shows the ESASS observer status, event counts, pattern tracking, and protection field trust level.
+
+**Quick status check (inline):**
+```bash
+python esass/hooks/esass_notify.py inline
+```
+
+**Launch the real-time unified dashboard (in separate terminal):**
+```bash
+python esass/hooks/esass_dashboard.py
+# or double-click: esass/hooks/esass_dashboard.bat
+```
+
 ## Project Overview
 
 **ESASS (Emergent Self-Adaptive Skill System)** is a meta-cognitive architecture that enables AI skills to achieve operational self-awareness through comprehensive observation, documentation, and pattern extraction from execution contexts. The system transforms implicit usage patterns into explicit, composable skill definitions.

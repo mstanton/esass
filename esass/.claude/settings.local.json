@@ -3,7 +3,18 @@
     "allow": [
       "Bash(python esass_cli.py test:*)",
       "Bash(python esass_cli.py stats:*)",
-      "Bash(python esass_cli.py:*)"
+      "Bash(python esass_cli.py:*)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(cd:*)",
+      "Bash(start cmd /k \"python C:/workspace/ESASS/esass/esass/hooks/stream-viewer.py\")",
+      "Bash(start cmd /k \"cd /d C:\\\\workspace\\\\ESASS\\\\esass && python esass/hooks/stream-viewer.py\")",
+      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\stream-viewer.bat\")",
+      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\dashboard.bat\")",
+      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\simulate.bat\")",
+      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\field_monitor.bat\")",
+      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\esass_dashboard.bat\")",
+      "WebSearch"
     ]
   }
 }
