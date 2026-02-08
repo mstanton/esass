@@ -29,6 +29,20 @@ def esass():
     pass
 
 
+@esass.command("audit")
+def audit():
+    """Launch the skill auditor TUI for human-in-the-middle review."""
+    try:
+        from esass_prototype.tui.auditor import SkillAuditorApp
+    except ImportError as e:
+        click.echo(f"Error importing TUI: {e}")
+        click.echo("Please ensure 'textual' is installed.")
+        return
+
+    app = SkillAuditorApp()
+    app.run()
+
+
 @esass.command("observe-start")
 @click.option("--sessions", default=20, help="Sessions per day to simulate")
 @click.option("--days", default=14, help="Days of history to generate")
@@ -416,7 +430,7 @@ def tail(n):
 @esass.command("setup")
 def setup():
     """Show setup instructions."""
-    from esass_prototype.analysis.realtime import Colors
+    from esass_prototype.analysis.realtime import Colors, RealtimeDisplay
     import esass.hooks.esass_hook as hook_module
 
     hook_path = Path(hook_module.__file__).resolve()
