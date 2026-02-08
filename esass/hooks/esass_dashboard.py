@@ -19,8 +19,16 @@ import os
 import sys
 import time
 from collections import Counter, deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+
+# Non-blocking keyboard input (Windows/Unix)
+try:
+    import msvcrt
+    HAS_MSVCRT = True
+except ImportError:
+    HAS_MSVCRT = False
+    import select
 
 # Enable UTF-8 and ANSI on Windows
 try:
@@ -43,6 +51,107 @@ REFRESH_RATE = 0.5
 
 # Unicode detection
 UNICODE_OK = sys.stdout.encoding and sys.stdout.encoding.lower() in ("utf-8", "utf8")
+
+# ============================================================================
+# Keyboard Input (ENHANCEMENT.md Phase 3.1)
+# ============================================================================
+
+
+def get_key_press():
+    """
+    Non-blocking keyboard input.
+
+    Returns:
+        str or None: The key pressed, or None if no key available
+    """
+    if HAS_MSVCRT:
+        # Windows
+        if msvcrt.kbhit():
+            key = msvcrt.getch()
+            try:
+                return key.decode('utf-8').upper()
+            except (UnicodeDecodeError, AttributeError):
+                return None
+        return None
+    else:
+        # Unix/Linux
+        import tty
+        import termios
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            rlist, _, _ = select.select([sys.stdin], [], [], 0)
+            if rlist:
+                return sys.stdin.read(1).upper()
+            return None
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+
+# ============================================================================
+# Sparklines (ENHANCEMENT.md Phase 3.2)
+# ============================================================================
+
+
+class Sparkline:
+    """ASCII sparkline generator for trend visualization."""
+
+    # Unicode sparkline blocks (8 levels)
+    BLOCKS = "▁▂▃▄▅▆▇█" if UNICODE_OK else "_.-=+*#@"
+
+    @classmethod
+    def render(cls, values, width=15, color=None):
+        """
+        Render a sparkline from a list of values.
+
+        Args:
+            values: List of numeric values
+            width: Target width (values will be bucketed)
+            color: Optional ANSI color code
+
+        Returns:
+            str: Sparkline string
+        """
+        if not values:
+            return " " * width
+
+        # Bucket values if needed
+        if len(values) > width:
+            bucket_size = len(values) // width
+            bucketed = []
+            for i in range(width):
+                start = i * bucket_size
+                end = start + bucket_size
+                bucket = values[start:end]
+                bucketed.append(sum(bucket) / len(bucket) if bucket else 0)
+            values = bucketed
+        elif len(values) < width:
+            # Pad with zeros on the left
+            values = [0] * (width - len(values)) + list(values)
+
+        # Normalize to 0-7 range
+        min_val = min(values) if values else 0
+        max_val = max(values) if values else 1
+        range_val = max_val - min_val if max_val != min_val else 1
+
+        result = ""
+        for v in values:
+            normalized = int(((v - min_val) / range_val) * 7)
+            normalized = max(0, min(7, normalized))
+            result += cls.BLOCKS[normalized]
+
+        if color:
+            return f"{color}{result}{C.RESET}"
+        return result
+
+    @classmethod
+    def render_with_label(cls, values, label, width=15, color=None):
+        """Render sparkline with a label."""
+        sparkline = cls.render(values, width, color)
+        if values:
+            current = values[-1]
+            return f"{label}: {sparkline} {current:.0f}"
+        return f"{label}: {sparkline} --"
 
 
 # Characters
@@ -86,6 +195,11 @@ class C:
     BG_GREEN = "\033[42m"
     BG_YELLOW = "\033[43m"
     BG_BLUE = "\033[44m"
+
+    # Enhanced alert effects (ENHANCEMENT.md Phase 3.3)
+    BLINK = "\033[5m"  # Blinking text
+    REVERSE = "\033[7m"  # Reverse video
+    BG_BRIGHT_RED = "\033[101m"  # Bright red background
 
 
 # ============================================================================
@@ -170,6 +284,20 @@ class ESASSState:
         self.trust_radius = 0.1
         self.field_health = "initializing"
 
+        # Time-series data for sparklines (ENHANCEMENT.md Phase 3.2)
+        self.error_history = deque(maxlen=30)  # Errors per 30-second bucket
+        self.success_history = deque(maxlen=30)  # Successes per 30-second bucket
+        self.event_rate_history = deque(maxlen=30)  # Events per 30-second bucket
+        self._last_bucket_time = datetime.now()
+        self._current_bucket_errors = 0
+        self._current_bucket_successes = 0
+        self._current_bucket_events = 0
+
+        # Display settings (ENHANCEMENT.md Phase 3.1)
+        self.show_history = True
+        self.flash_alerts = True
+        self._flash_state = False  # For blinking effect
+
         # Load initial state
         self._load_sequence_state()
         self._load_events()
@@ -214,10 +342,18 @@ class ESASSState:
         data = event.get("event_data", event.get("data", {}))
         event_type = event.get("event_type")
 
-        # Track alerts
+        # Track alerts and errors
         if event_type == "reliability_alert":
             self.alerts.append(event)
             self.alert_count += 1
+            self._current_bucket_errors += 1
+
+        if event_type == "error" or data.get("success") is False:
+            self._current_bucket_errors += 1
+        elif data.get("success") is True:
+            self._current_bucket_successes += 1
+
+        self._current_bucket_events += 1
 
         # Track boundary actions
         if event_type == "boundary_action":
@@ -239,6 +375,73 @@ class ESASSState:
             if len(self.recent_tools) >= 2:
                 seq = f"{self.recent_tools[-2]} {Sym.ARROW} {self.recent_tools[-1]}"
                 self.sequences[seq] += 1
+
+    def _update_time_buckets(self):
+        """Update time-series buckets for sparklines."""
+        now = datetime.now()
+        if (now - self._last_bucket_time).total_seconds() >= 30:
+            # Save current bucket
+            self.error_history.append(self._current_bucket_errors)
+            self.success_history.append(self._current_bucket_successes)
+            self.event_rate_history.append(self._current_bucket_events)
+
+            # Reset for new bucket
+            self._current_bucket_errors = 0
+            self._current_bucket_successes = 0
+            self._current_bucket_events = 0
+            self._last_bucket_time = now
+
+    def handle_key(self, key):
+        """
+        Handle keyboard input.
+
+        Keys:
+            H - Toggle historical alerts display
+            S - Save snapshot to markdown
+            C - Clear event buffer
+        """
+        if key == 'H':
+            self.show_history = not self.show_history
+            return f"History display {'ON' if self.show_history else 'OFF'}"
+        elif key == 'S':
+            filename = self._save_snapshot()
+            return f"Snapshot saved to {filename}"
+        elif key == 'C':
+            self.recent_events.clear()
+            return "Event buffer cleared"
+        return None
+
+    def _save_snapshot(self):
+        """Save current dashboard state to markdown file."""
+        filename = f"esass_snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        filepath = ESASS_DATA_DIR / filename
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(f"# ESASS Dashboard Snapshot\\n")
+            f.write(f"**Generated:** {datetime.now().isoformat()}\\n\\n")
+
+            f.write(f"## Summary\\n")
+            f.write(f"- **Total Events:** {self.total_events}\\n")
+            f.write(f"- **Alert Count:** {self.alert_count}\\n")
+            f.write(f"- **Field Health:** {self.field_health}\\n")
+            f.write(f"- **Trust Radius:** {self.trust_radius:.0%}\\n\\n")
+
+            f.write(f"## Tool Usage\\n")
+            for tool, count in self.tool_counts.most_common(10):
+                f.write(f"- {tool}: {count}\\n")
+            f.write("\\n")
+
+            f.write(f"## Patterns Detected\\n")
+            for seq, count in self.sequences.most_common(10):
+                f.write(f"- {seq}: {count}x\\n")
+            f.write("\\n")
+
+            f.write(f"## Recent Alerts\\n")
+            for alert in list(self.alerts)[-10:]:
+                data = alert.get("event_data", alert.get("data", {}))
+                f.write(f"- {data.get('alert_type', 'unknown')}: {data.get('message', '')}\\n")
+
+        return str(filepath)
 
     def update(self):
         """Check for new events and update state."""
@@ -265,6 +468,12 @@ class ESASSState:
 
         # Update field metrics
         self._update_field_metrics()
+
+        # Update time-series data for sparklines
+        self._update_time_buckets()
+
+        # Toggle flash state for blinking alerts
+        self._flash_state = not self._flash_state
 
     def _update_skills(self):
         """Update skill candidates from sequences."""
@@ -392,6 +601,7 @@ def format_event_line(event, max_width=60):
     if event_type == "boundary_action":
         zone = data.get("zone", "EXPLORE")
         tool = data.get("tool", "?")
+        risk = data.get("risk_level", "low")
         icon = TOOL_ICONS.get(tool, "B")
         color = {
             "CORE": C.WHITE,
@@ -399,6 +609,15 @@ def format_event_line(event, max_width=60):
             "LEARNING": C.YELLOW,
             "EXPLORATION": C.BLUE,
         }.get(zone, C.WHITE)
+
+        # Enhanced highlighting for CORE zone with write operations (Phase 3.3)
+        if zone == "CORE" and tool in ["Write", "Edit", "Delete"] and risk == "high":
+            # Critical boundary violation - flash effect
+            return (
+                f"{C.DIM}{time_only}{C.RESET} {C.BG_BRIGHT_RED}{C.WHITE}{C.BOLD}[!]{icon}]{C.RESET} "
+                f"{C.REVERSE}{C.RED} CORE VIOLATION {C.RESET} {data.get('file_path', '')[:25]}"
+            )
+
         return (
             f"{C.DIM}{time_only}{C.RESET} {color}[{icon}]{C.RESET} "
             f"{C.BOLD}{color}{zone:11}{C.RESET} {data.get('file_path', '')[:30]}"
@@ -441,7 +660,7 @@ def print_line(text=""):
     print(f"{text}{C.CLEAR_LINE}")
 
 
-def render_dashboard(state: ESASSState, first_render=False):
+def render_dashboard(state: ESASSState, first_render=False, status_message=None):
     """Render the complete unified dashboard."""
     # First render clears screen, subsequent just move cursor home
     if first_render:
@@ -474,7 +693,12 @@ def render_dashboard(state: ESASSState, first_render=False):
     )  # rough estimate for ANSI codes
     print_line(f"  {title}  {sync_display}{' ' * max(1, padding)}{timestamp}")
     print_line(f"{'═' * term_width}{C.RESET}")
-    print_line()
+
+    # Status message line (for keyboard feedback)
+    if status_message:
+        print_line(f"  {C.BG_GREEN}{C.WHITE} {status_message} {C.RESET}")
+    else:
+        print_line()
 
     # Prepare field visualization
     field_lines = render_field(state)
@@ -545,24 +769,30 @@ def render_dashboard(state: ESASSState, first_render=False):
         gauge = render_gauge(count, max_tool, 8, color)
         col2.append(f"{color}[{icon}]{C.RESET} {tool:6} {gauge} {count:2}")
 
-    # Column 3: System Health
+    # Column 3: System Health with Sparklines (Phase 3.2)
     col3 = [f"{C.BOLD}System Health{C.RESET}", ""]
     if state.alert_count > 0:
         col3.append(f"Alerts:  {C.RED}{Sym.CROSS} {state.alert_count}{C.RESET}")
     else:
         col3.append(f"Alerts:  {C.GREEN}{Sym.CHECK} NONE{C.RESET}")
 
-    # Boundary stats
-    core_acts = state.boundary_stats.get("CORE", 0)
-    col3.append(f"Core:    {C.WHITE}{core_acts:2}{C.RESET} actions")
+    # Sparklines for trends
+    error_spark = Sparkline.render(list(state.error_history), width=10, color=C.RED)
+    success_spark = Sparkline.render(list(state.success_history), width=10, color=C.GREEN)
+    col3.append(f"Errors:  {error_spark}")
+    col3.append(f"Success: {success_spark}")
 
-    # Recent Alert
+    # Recent Alert with flash effect
     if state.alerts:
         last_event_data = state.alerts[-1].get(
             "event_data", state.alerts[-1].get("data", {})
         )
         last_alert = last_event_data.get("alert_type", "failure")
-        col3.append(f"Last:    {C.DIM}{last_alert[:15]}{C.RESET}")
+        # Flash effect for recent alerts
+        if state._flash_state and state.flash_alerts:
+            col3.append(f"Last:    {C.BG_RED}{C.WHITE}{last_alert[:15]}{C.RESET}")
+        else:
+            col3.append(f"Last:    {C.RED}{last_alert[:15]}{C.RESET}")
     else:
         col3.append(f"Last:    {C.DIM}none{C.RESET}")
 
@@ -660,14 +890,15 @@ def render_dashboard(state: ESASSState, first_render=False):
 
     print_line()
 
-    # Footer
+    # Footer with keyboard shortcuts (Phase 3.1)
     last_event_ago = ""
     if state.last_event_time:
         ago = (datetime.now() - state.last_event_time).total_seconds()
-        last_event_ago = f" │ Last event: {ago:.1f}s ago"
+        last_event_ago = f" │ Last: {ago:.0f}s ago"
 
+    shortcuts = f"[H]istory:[{'ON' if state.show_history else 'OFF'}] [S]napshot [C]lear"
     print_line(
-        f"  {C.DIM}Press Ctrl+C to exit{last_event_ago} │ Showing {len(events_to_show)}/{len(state.recent_events)} buffered{C.RESET}"
+        f"  {C.DIM}{shortcuts}{last_event_ago} │ {len(events_to_show)}/{len(state.recent_events)} events │ Ctrl+C to exit{C.RESET}"
     )
 
     # Show cursor at end
@@ -680,8 +911,10 @@ def render_dashboard(state: ESASSState, first_render=False):
 
 
 def main():
-    """Main dashboard loop."""
+    """Main dashboard loop with keyboard handling."""
     state = ESASSState()
+    status_message = None
+    status_message_time = None
 
     print(f"{C.CYAN}Starting ESASS Unified Dashboard...{C.RESET}")
     time.sleep(0.5)
@@ -689,8 +922,21 @@ def main():
     first_render = True
     try:
         while True:
+            # Handle keyboard input (Phase 3.1)
+            key = get_key_press()
+            if key:
+                result = state.handle_key(key)
+                if result:
+                    status_message = result
+                    status_message_time = datetime.now()
+
+            # Clear status message after 3 seconds
+            if status_message_time and (datetime.now() - status_message_time).total_seconds() > 3:
+                status_message = None
+                status_message_time = None
+
             state.update()
-            render_dashboard(state, first_render=first_render)
+            render_dashboard(state, first_render=first_render, status_message=status_message)
             first_render = False
             time.sleep(REFRESH_RATE)
 
