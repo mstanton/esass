@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ESASS Session Startup
 
+**Automatic Dashboard Launch**: The ESASS dashboard automatically launches in a new terminal window when a Claude Code session starts (via `SessionStart` hook in `~/.claude/hooks.json`).
+
 **At the start of each Claude Code session in this project, display the ESASS sync status:**
 
 ```bash
@@ -17,11 +19,16 @@ This shows the ESASS observer status, event counts, pattern tracking, and protec
 python esass/hooks/esass_notify.py inline
 ```
 
-**Launch the real-time unified dashboard (in separate terminal):**
+**Manual dashboard launch (if not auto-started):**
 ```bash
 python esass/hooks/esass_dashboard.py
 # or double-click: esass/hooks/esass_dashboard.bat
 ```
+
+**Dashboard keyboard shortcuts:**
+- `[H]` - Toggle historical alerts display
+- `[S]` - Save dashboard snapshot to markdown
+- `[C]` - Clear event buffer
 
 ## Project Overview
 

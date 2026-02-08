@@ -912,6 +912,11 @@ def render_dashboard(state: ESASSState, first_render=False, status_message=None)
 
 def main():
     """Main dashboard loop with keyboard handling."""
+    # Create lock file to indicate dashboard is running
+    lock_file = Path.home() / ".esass" / "dashboard.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_file.write_text(str(os.getpid()))
+
     state = ESASSState()
     status_message = None
     status_message_time = None
@@ -941,6 +946,14 @@ def main():
             time.sleep(REFRESH_RATE)
 
     except KeyboardInterrupt:
+        pass
+    finally:
+        # Clean up lock file
+        try:
+            lock_file.unlink()
+        except Exception:
+            pass
+
         print(C.SHOW_CURSOR + C.CLEAR_SCREEN, end="")
         print(f"\n{C.GREEN}{Sym.CHECK} Dashboard stopped{C.RESET}")
         print(f"  Total events: {state.total_events}")
