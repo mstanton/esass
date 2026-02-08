@@ -23,6 +23,20 @@ import sys
 from datetime import datetime
 from pathlib import Path
 import hashlib
+import pickle  # for persistent state if needed
+from typing import Any, Dict, List, Optional
+
+# Add parent to sys.path to allow importing esass core
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+try:
+    from esass.probes.config import ESASSProbeSystemConfig, create_default_probes
+    from esass.probes.registry import ProbeRegistry
+    from esass.probes.base import ProbeContext
+
+    PROBES_AVAILABLE = True
+except ImportError:
+    PROBES_AVAILABLE = False
 
 # ESASS data directory
 # ESASS data directory
@@ -144,19 +158,19 @@ def log_event(event_type: str, data: dict):
     log_file = ESASS_DATA_DIR / "logs" / f"log_{today}.jsonl"
 
     entry = {
-        "id": hashlib.md5(
+        "event_id": hashlib.md5(
             f"{datetime.now().isoformat()}{event_type}{json.dumps(data)}".encode()
         ).hexdigest()[:16],
         "timestamp": datetime.now().isoformat(),
         "event_type": event_type,
         "session_id": get_session_id(),
-        "data": data,
+        "event_data": data,
     }
 
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
-    return entry["id"]
+    return entry["event_id"]
 
 
 def update_sequence_state(tool_name: str, context: dict):
@@ -196,8 +210,49 @@ def update_sequence_state(tool_name: str, context: dict):
         pass  # Don't fail on state tracking errors
 
 
+class CapturePipeline:
+    """Simple pipeline to capture probe entries in-process."""
+
+    def __init__(self):
+        self.entries = []
+
+    def submit(self, entries):
+        self.entries.extend(entries)
+
+
 def main():
     """Process hook input from Claude Code."""
+    ensure_data_dir()
+
+    # Initialize Probes if available
+    registry = None
+    capture_pipeline = CapturePipeline()
+    state_file = ESASS_DATA_DIR / "state" / "probe_state.pkl"
+
+    if PROBES_AVAILABLE:
+        # Try to load existing registry from pickle
+        if state_file.exists():
+            try:
+                with open(state_file, "rb") as f:
+                    registry = pickle.load(f)
+                    # Restore transient pipeline
+                    registry.event_pipeline = capture_pipeline
+            except:
+                registry = None
+
+        # Create new if loading failed
+        if registry is None:
+            try:
+                config = ESASSProbeSystemConfig()
+                config.data_dir = str(ESASS_DATA_DIR)
+                probes = create_default_probes(config)
+                registry = ProbeRegistry()
+                registry.event_pipeline = capture_pipeline
+                for probe in probes:
+                    registry.register(probe)
+            except Exception:
+                registry = None
+
     try:
         input_data = sys.stdin.read()
         if not input_data.strip():
@@ -209,53 +264,105 @@ def main():
         tool_name = hook_data.get("tool_name", "unknown")
         tool_input = hook_data.get("tool_input", {})
         tool_output = hook_data.get("tool_output", "")
-        session_id = hook_data.get("session_id", "unknown")
+        # Claude Code results often indicate success/failure
+        success = hook_data.get("success", True)
+        error = hook_data.get("error")
+        session_id = get_session_id()
 
-        # Skip if tool name looks invalid
         if not tool_name or tool_name == "unknown":
             return
 
-        # Extract semantic context
+        # 1. Notify Probes (Meta-cognitive analysis)
+        if registry:
+            # Notify of tool completion (Claude hook runs after tool use)
+            event_data = {
+                "tool_name": tool_name,
+                "parameters": tool_input,
+                "result": str(tool_output)[:1000],
+                "success": success,
+                "error": error,
+            }
+
+            # Use same timestamp for consistency
+            ts = datetime.now()
+
+            # We notify both start (reconstructed) and complete to trigger all probes
+            # ToolCallProbe and ReliabilityProbe listen to completion/error
+            registry.notify(
+                "tool_call_start",
+                {
+                    "tool_name": tool_name,
+                    "parameters": tool_input,
+                    "call_id": "hook-last",
+                },
+                {"session_id": session_id, "timestamp": ts},
+            )
+
+            # Capture probe observations (now via pipeline)
+            registry.notify(
+                "tool_call_complete" if success else "tool_call_error",
+                event_data,
+                {"session_id": session_id, "timestamp": ts},
+            )
+
+            # Log any meta-cognitive observations (alerts, boundary actions, etc.)
+            if capture_pipeline.entries:
+                for obs in capture_pipeline.entries:
+                    log_entry_object(obs)
+
+        # 2. Standard Context Extraction (Legacy support for simple dashboards)
         context = extract_context(tool_name, tool_input)
 
-        # Prepare log data
+        # 3. Log the primary tool event
         log_data = {
             "tool_name": tool_name,
             "parameters": tool_input,
             "result_preview": str(tool_output)[:500] if tool_output else None,
             "context": context,
-            "original_session": session_id,
+            "success": success,
+            "error": error,
         }
-
-        # Log the event
         log_event("tool_call", log_data)
 
-        # Update sequence tracking
+        # 4. Update sequence tracking
         update_sequence_state(tool_name, context)
 
-        # Debug log
-        try:
-            debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
-            with open(debug_log, "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now().isoformat()}] Captured {tool_name}\n")
-        except:
-            pass
+        # 5. Persist probe state
+        if registry:
+            try:
+                # Remove non-pickleable pipeline reference
+                registry.event_pipeline = None
+                with open(state_file, "wb") as f:
+                    pickle.dump(registry, f)
+            except Exception as pe:
+                try:
+                    debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
+                    with open(debug_log, "a", encoding="utf-8") as f:
+                        f.write(
+                            f"[{datetime.now().isoformat()}] Pickle Error: {str(pe)}\n"
+                        )
+                except:
+                    pass
 
-    except json.JSONDecodeError:
-        # Not valid JSON
-        pass
     except Exception as e:
-        # Log errors for debugging
         try:
-            # Ensure data dir exists before trying to log error
-            ensure_data_dir()
             debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
             with open(debug_log, "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now().isoformat()}] Error: {str(e)}\n")
-
+                f.write(
+                    f"[{datetime.now().isoformat()}] Error in hook main: {str(e)}\n"
+                )
             log_event("hook_error", {"error": str(e)})
         except:
             pass
+
+
+def log_entry_object(entry):
+    """Log a LogEntry object directly."""
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = ESASS_DATA_DIR / "logs" / f"log_{today}.jsonl"
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry.to_dict()) + "\n")
 
 
 if __name__ == "__main__":

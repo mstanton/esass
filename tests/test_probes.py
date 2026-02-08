@@ -28,6 +28,7 @@ from esass_prototype.models import LogEntry
 # Base Probe Tests
 # =============================================================================
 
+
 class TestProbe:
     """Test base probe functionality"""
 
@@ -40,37 +41,38 @@ class TestProbe:
     def test_tag_extractor_from_tool(self):
         """TagExtractor correctly identifies tool patterns"""
         # Read Python file
-        tags = TagExtractor.extract_from_tool('Read', {
-            'file_path': 'src/test_module.py'
-        })
+        tags = TagExtractor.extract_from_tool(
+            "Read", {"file_path": "src/test_module.py"}
+        )
 
-        assert 'read' in tags
-        assert 'file_type:py' in tags
-        assert 'language:python' in tags
-        assert 'testing' in tags
+        assert "read" in tags
+        assert "file_type:py" in tags
+        assert "language:python" in tags
+        assert "testing" in tags
 
     def test_tag_extractor_from_bash(self):
         """TagExtractor extracts git commands"""
-        tags = TagExtractor.extract_from_tool('Bash', {
-            'command': 'git commit -m "test"'
-        })
+        tags = TagExtractor.extract_from_tool(
+            "Bash", {"command": 'git commit -m "test"'}
+        )
 
-        assert 'bash' in tags
-        assert 'git' in tags
-        assert 'version_control' in tags
-        assert 'git_commit' in tags
+        assert "bash" in tags
+        assert "git" in tags
+        assert "version_control" in tags
+        assert "git_commit" in tags
 
     def test_tag_extractor_from_text(self):
         """TagExtractor identifies task types from text"""
         text = "Fix the bug in the authentication module"
         tags = TagExtractor.extract_from_text(text)
 
-        assert 'debugging' in tags
+        assert "debugging" in tags
 
 
 # =============================================================================
 # Tool Probe Tests
 # =============================================================================
+
 
 class TestToolCallProbe:
     """Test tool call observation probe"""
@@ -79,32 +81,32 @@ class TestToolCallProbe:
         """ToolCallProbe handles tool-related events"""
         probe = ToolCallProbe()
 
-        assert probe.can_observe('tool_call_start')
-        assert probe.can_observe('tool_call_complete')
-        assert probe.can_observe('tool_call_error')
-        assert not probe.can_observe('message_generated')
+        assert probe.can_observe("tool_call_start")
+        assert probe.can_observe("tool_call_complete")
+        assert probe.can_observe("tool_call_error")
+        assert not probe.can_observe("message_generated")
 
     def test_observe_tool_start(self):
         """ToolCallProbe captures tool start events"""
         probe = ToolCallProbe()
 
         context = ProbeContext(
-            event_type='tool_call_start',
+            event_type="tool_call_start",
             event_data={
-                'tool_name': 'Read',
-                'parameters': {'file_path': 'test.py'},
-                'call_id': 'call-123'
+                "tool_name": "Read",
+                "parameters": {"file_path": "test.py"},
+                "call_id": "call-123",
             },
-            session_id='session-1'
+            session_id="session-1",
         )
 
         entries = probe.observe(context)
 
         assert entries is not None
         assert len(entries) == 1
-        assert entries[0].event_type == 'tool_usage'
-        assert entries[0].event_data['tool_name'] == 'Read'
-        assert entries[0].session_id == 'session-1'
+        assert entries[0].event_type == "tool_usage"
+        assert entries[0].event_data["tool_name"] == "Read"
+        assert entries[0].session_id == "session-1"
 
     def test_observe_tool_complete(self):
         """ToolCallProbe captures tool completion"""
@@ -112,68 +114,63 @@ class TestToolCallProbe:
 
         # Start event
         start_context = ProbeContext(
-            event_type='tool_call_start',
+            event_type="tool_call_start",
             event_data={
-                'tool_name': 'Grep',
-                'parameters': {'pattern': 'def.*'},
-                'call_id': 'call-456'
+                "tool_name": "Grep",
+                "parameters": {"pattern": "def.*"},
+                "call_id": "call-456",
             },
-            session_id='session-2'
+            session_id="session-2",
         )
         probe.observe(start_context)
 
         # Complete event
         complete_context = ProbeContext(
-            event_type='tool_call_complete',
-            event_data={
-                'call_id': 'call-456',
-                'result': ['match1', 'match2']
-            },
-            session_id='session-2'
+            event_type="tool_call_complete",
+            event_data={"call_id": "call-456", "result": ["match1", "match2"]},
+            session_id="session-2",
         )
 
         entries = probe.observe(complete_context)
 
         assert entries is not None
         assert len(entries) == 1
-        assert entries[0].event_type == 'outcome'
-        assert entries[0].event_data['success'] is True
+        assert entries[0].event_type == "outcome"
+        assert entries[0].event_data["success"] is True
 
     def test_observe_tool_error(self):
         """ToolCallProbe captures tool errors"""
         probe = ToolCallProbe()
 
         context = ProbeContext(
-            event_type='tool_call_error',
+            event_type="tool_call_error",
             event_data={
-                'call_id': 'call-789',
-                'tool_name': 'Bash',
-                'error': 'Command failed with exit code 1'
+                "call_id": "call-789",
+                "tool_name": "Bash",
+                "error": "Command failed with exit code 1",
             },
-            session_id='session-3'
+            session_id="session-3",
         )
 
         entries = probe.observe(context)
 
         assert entries is not None
         assert len(entries) == 1
-        assert entries[0].event_type == 'error'
-        assert 'Command failed' in entries[0].event_data['error_message']
+        assert entries[0].event_type == "error"
+        assert "Command failed" in entries[0].event_data["error_message"]
 
     def test_parameter_sanitization(self):
         """ToolCallProbe redacts sensitive parameters"""
         probe = ToolCallProbe()
 
         context = ProbeContext(
-            event_type='tool_call_start',
+            event_type="tool_call_start",
             event_data={
-                'tool_name': 'Bash',
-                'parameters': {
-                    'command': 'curl -H "Authorization: token secret123"'
-                },
-                'call_id': 'call-999'
+                "tool_name": "Bash",
+                "parameters": {"command": 'curl -H "Authorization: token secret123"'},
+                "call_id": "call-999",
             },
-            session_id='session-4'
+            session_id="session-4",
         )
 
         entries = probe.observe(context)
@@ -186,6 +183,7 @@ class TestToolCallProbe:
 # Reasoning Probe Tests
 # =============================================================================
 
+
 class TestReasoningProbe:
     """Test reasoning chain observation probe"""
 
@@ -193,10 +191,10 @@ class TestReasoningProbe:
         """ReasoningProbe handles reasoning-related events"""
         probe = ReasoningProbe()
 
-        assert probe.can_observe('thinking_block')
-        assert probe.can_observe('message_generated')
-        assert probe.can_observe('hypothesis_formed')
-        assert not probe.can_observe('tool_call_start')
+        assert probe.can_observe("thinking_block")
+        assert probe.can_observe("message_generated")
+        assert probe.can_observe("hypothesis_formed")
+        assert not probe.can_observe("tool_call_start")
 
     def test_detect_reasoning_indicators(self):
         """ReasoningProbe identifies reasoning language"""
@@ -228,31 +226,32 @@ class TestReasoningProbe:
 
         assert evidence is not None
         assert len(evidence) > 0
-        assert 'health check' in evidence[0].lower()
+        assert "health check" in evidence[0].lower()
 
     def test_observe_thinking_block(self):
         """ReasoningProbe processes thinking blocks"""
         probe = ReasoningProbe(min_confidence=0.0)
 
         context = ProbeContext(
-            event_type='thinking_block',
+            event_type="thinking_block",
             event_data={
-                'content': 'I think the issue is in the authentication module. '
-                          'This likely means the token validation is failing.'
+                "content": "I think the issue is in the authentication module. "
+                "This likely means the token validation is failing."
             },
-            session_id='session-5'
+            session_id="session-5",
         )
 
         entries = probe.observe(context)
 
         assert entries is not None
         assert len(entries) >= 1
-        assert entries[0].event_type == 'reasoning'
+        assert entries[0].event_type == "reasoning"
 
 
 # =============================================================================
 # Decision Probe Tests
 # =============================================================================
+
 
 class TestDecisionProbe:
     """Test decision point observation probe"""
@@ -261,56 +260,57 @@ class TestDecisionProbe:
         """DecisionProbe handles decision-related events"""
         probe = DecisionProbe()
 
-        assert probe.can_observe('tool_selected')
-        assert probe.can_observe('approach_selected')
-        assert probe.can_observe('plan_mode_decision')
-        assert not probe.can_observe('tool_call_start')
+        assert probe.can_observe("tool_selected")
+        assert probe.can_observe("approach_selected")
+        assert probe.can_observe("plan_mode_decision")
+        assert not probe.can_observe("tool_call_start")
 
     def test_observe_tool_selection(self):
         """DecisionProbe captures tool selection decisions"""
         probe = DecisionProbe(min_options=2)
 
         context = ProbeContext(
-            event_type='tool_selected',
+            event_type="tool_selected",
             event_data={
-                'selected_tool': 'Grep',
-                'alternatives': ['Glob', 'Read'],
-                'rationale': 'Grep is more efficient for pattern matching'
+                "selected_tool": "Grep",
+                "alternatives": ["Glob", "Read"],
+                "rationale": "Grep is more efficient for pattern matching",
             },
-            session_id='session-6'
+            session_id="session-6",
         )
 
         entries = probe.observe(context)
 
         assert entries is not None
         assert len(entries) == 1
-        assert entries[0].event_type == 'decision'
-        assert entries[0].event_data['decision'] == 'use_Grep'
+        assert entries[0].event_type == "decision"
+        assert entries[0].event_data["decision"] == "use_Grep"
 
     def test_observe_plan_mode_decision(self):
         """DecisionProbe captures plan mode decisions"""
         probe = DecisionProbe()
 
         context = ProbeContext(
-            event_type='plan_mode_decision',
+            event_type="plan_mode_decision",
             event_data={
-                'decision': 'enter',
-                'rationale': 'Task is complex with multiple approaches',
-                'task_complexity': 'high'
+                "decision": "enter",
+                "rationale": "Task is complex with multiple approaches",
+                "task_complexity": "high",
             },
-            session_id='session-7'
+            session_id="session-7",
         )
 
         entries = probe.observe(context)
 
         assert entries is not None
         assert len(entries) == 1
-        assert 'plan_mode' in entries[0].event_data['decision']
+        assert "plan_mode" in entries[0].event_data["decision"]
 
 
 # =============================================================================
 # Registry Tests
 # =============================================================================
+
 
 class TestProbeRegistry:
     """Test probe registry and event routing"""
@@ -336,11 +336,11 @@ class TestProbeRegistry:
         registry.register(reasoning_probe)
 
         # Tool event should only go to tool probe
-        count = registry.notify('tool_call_start', {
-            'tool_name': 'Read',
-            'parameters': {},
-            'call_id': 'test'
-        }, {'session_id': 'test-session'})
+        count = registry.notify(
+            "tool_call_start",
+            {"tool_name": "Read", "parameters": {}, "call_id": "test"},
+            {"session_id": "test-session"},
+        )
 
         # Should generate entries from tool probe only
         assert count >= 1
@@ -360,7 +360,7 @@ class TestProbeRegistry:
         registry.register(ErrorProbe())
 
         # Should not crash
-        count = registry.notify('test_event', {}, {})
+        count = registry.notify("test_event", {}, {})
 
         # No entries due to error
         assert count == 0
@@ -373,21 +373,22 @@ class TestProbeRegistry:
         registry.register(probe)
 
         # Generate some events
-        registry.notify('tool_call_start', {
-            'tool_name': 'Read',
-            'parameters': {},
-            'call_id': 'test'
-        }, {'session_id': 'test'})
+        registry.notify(
+            "tool_call_start",
+            {"tool_name": "Read", "parameters": {}, "call_id": "test"},
+            {"session_id": "test"},
+        )
 
         stats = registry.get_stats()
 
-        assert stats['total_events_received'] == 1
-        assert stats['registered_probes'] == 1
+        assert stats["total_events_received"] == 1
+        assert stats["registered_probes"] == 1
 
 
 # =============================================================================
 # Pipeline Tests
 # =============================================================================
+
 
 class TestEventPipeline:
     """Test event pipeline"""
@@ -396,9 +397,7 @@ class TestEventPipeline:
         """Pipeline initializes correctly"""
         with tempfile.TemporaryDirectory() as tmpdir:
             pipeline = EventPipeline(
-                data_dir=Path(tmpdir),
-                buffer_size=10,
-                flush_interval=1.0
+                data_dir=Path(tmpdir), buffer_size=10, flush_interval=1.0
             )
 
             assert pipeline.buffer_size == 10
@@ -410,17 +409,13 @@ class TestEventPipeline:
         """Pipeline processes and writes events"""
         with tempfile.TemporaryDirectory() as tmpdir:
             pipeline = EventPipeline(
-                data_dir=Path(tmpdir),
-                buffer_size=5,
-                flush_interval=0.1
+                data_dir=Path(tmpdir), buffer_size=5, flush_interval=0.1
             )
 
             # Create test entries
             entries = [
                 LogEntry.create(
-                    event_type='test',
-                    event_data={'test': i},
-                    session_id='test-session'
+                    event_type="test", event_data={"test": i}, session_id="test-session"
                 )
                 for i in range(10)
             ]
@@ -432,7 +427,7 @@ class TestEventPipeline:
             time.sleep(0.5)
 
             stats = pipeline.get_stats()
-            assert stats['total_submitted'] == 10
+            assert stats["total_submitted"] == 10
 
             pipeline.shutdown()
 
@@ -442,14 +437,12 @@ class TestEventPipeline:
             pipeline = EventPipeline(
                 data_dir=Path(tmpdir),
                 buffer_size=3,
-                flush_interval=10.0  # Long interval, won't trigger
+                flush_interval=10.0,  # Long interval, won't trigger
             )
 
             entries = [
                 LogEntry.create(
-                    event_type='test',
-                    event_data={'i': i},
-                    session_id='test'
+                    event_type="test", event_data={"i": i}, session_id="test"
                 )
                 for i in range(5)
             ]
@@ -459,7 +452,7 @@ class TestEventPipeline:
 
             # Should have flushed due to buffer size
             stats = pipeline.get_stats()
-            assert stats['flush_count'] > 0
+            assert stats["flush_count"] > 0
 
             pipeline.shutdown()
 
@@ -467,6 +460,7 @@ class TestEventPipeline:
 # =============================================================================
 # Configuration Tests
 # =============================================================================
+
 
 class TestConfiguration:
     """Test configuration system"""
@@ -492,18 +486,21 @@ class TestConfiguration:
         config.calibration_probe.enabled = False
         config.insight_probe.enabled = False
         config.scope_expansion_probe.enabled = False
+        config.reliability_probe.enabled = False
+        config.field_boundary_probe.enabled = False
 
         probes = create_default_probes(config)
 
         # Should have tool and reasoning, not decision
         assert len(probes) == 2
         probe_types = [type(p).__name__ for p in probes]
-        assert 'ToolSequenceDetector' in probe_types or 'ToolCallProbe' in probe_types
+        assert "ToolSequenceDetector" in probe_types or "ToolCallProbe" in probe_types
 
 
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestEndToEndIntegration:
     """End-to-end integration tests"""
@@ -513,9 +510,7 @@ class TestEndToEndIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create pipeline
             pipeline = EventPipeline(
-                data_dir=Path(tmpdir),
-                buffer_size=10,
-                flush_interval=0.5
+                data_dir=Path(tmpdir), buffer_size=10, flush_interval=0.5
             )
 
             # Create registry
@@ -529,41 +524,52 @@ class TestEndToEndIntegration:
             registry.start()
 
             # Simulate tool usage
-            registry.notify('tool_call_start', {
-                'tool_name': 'Read',
-                'parameters': {'file_path': 'test.py'},
-                'call_id': 'call-1'
-            }, {'session_id': 'test-session'})
+            registry.notify(
+                "tool_call_start",
+                {
+                    "tool_name": "Read",
+                    "parameters": {"file_path": "test.py"},
+                    "call_id": "call-1",
+                },
+                {"session_id": "test-session"},
+            )
 
-            registry.notify('tool_call_complete', {
-                'call_id': 'call-1',
-                'result': 'file content'
-            }, {'session_id': 'test-session'})
+            registry.notify(
+                "tool_call_complete",
+                {"call_id": "call-1", "result": "file content"},
+                {"session_id": "test-session"},
+            )
 
             # Simulate reasoning
-            registry.notify('thinking_block', {
-                'content': 'I think the file contains the implementation we need'
-            }, {'session_id': 'test-session'})
+            registry.notify(
+                "thinking_block",
+                {"content": "I think the file contains the implementation we need"},
+                {"session_id": "test-session"},
+            )
 
             # Simulate decision
-            registry.notify('tool_selected', {
-                'selected_tool': 'Edit',
-                'alternatives': ['Write', 'Edit'],
-                'rationale': 'Edit is safer for existing files'
-            }, {'session_id': 'test-session'})
+            registry.notify(
+                "tool_selected",
+                {
+                    "selected_tool": "Edit",
+                    "alternatives": ["Write", "Edit"],
+                    "rationale": "Edit is safer for existing files",
+                },
+                {"session_id": "test-session"},
+            )
 
             # Wait for processing
             time.sleep(1.0)
 
             # Check statistics
             stats = registry.get_stats()
-            assert stats['total_events_received'] == 4
-            assert stats['total_entries_generated'] > 0
+            assert stats["total_events_received"] == 4
+            assert stats["total_entries_generated"] > 0
 
             # Cleanup
             registry.stop()
             pipeline.shutdown()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
