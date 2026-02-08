@@ -1,4 +1,4 @@
-## ESASS Event Capture Probe System
+# ESASS Event Capture Probe System
 
 Real-time observation infrastructure for capturing Claude Code execution events.
 
@@ -24,7 +24,7 @@ The ESASS probe system provides a flexible, high-performance framework for obser
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     Claude Code                              │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐             │
@@ -340,7 +340,7 @@ registry, pipeline, config = initialize_system(config)
 Tested on typical hardware (Intel i7, 16GB RAM):
 
 | Metric | Target | Actual |
-|--------|--------|--------|
+| --- | --- | --- |
 | Event capture latency | <10ms | ~3ms |
 | Throughput | 1000 events/sec | ~1500 events/sec |
 | Memory footprint | <100MB | ~60MB |
@@ -424,7 +424,7 @@ python examples/claude_code_integration.py
 
 Expected output:
 
-```
+```text
 ======================================================================
 ESASS Claude Code Integration Example
 ======================================================================
