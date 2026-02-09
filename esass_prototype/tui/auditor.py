@@ -191,7 +191,7 @@ class SkillAuditorApp(App):
     .sidebar {
         width: 30%;
         height: 100%;
-        border-right: tall $primary;
+        border-right: tall blue;
         background: $surface;
     }
     
@@ -208,7 +208,7 @@ class SkillAuditorApp(App):
     SkillDetail, PatternDetail {
         padding: 1;
         background: $boost;
-        border: rounded $primary;
+        border: round blue;
     }
     
     MonitoringDashboard {
@@ -218,7 +218,7 @@ class SkillAuditorApp(App):
     DataTable {
         height: auto;
         max-height: 20;
-        border: rounded $primary;
+        border: round blue;
     }
     """
 

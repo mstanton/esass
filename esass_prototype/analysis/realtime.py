@@ -42,6 +42,7 @@ class Sym:
     CIRCLE = "○" if UNICODE_SUPPORT else "o"
     BAR_FULL = "█" if UNICODE_SUPPORT else "#"
     BAR_EMPTY = "░" if UNICODE_SUPPORT else "-"
+    HLINE = "─" if UNICODE_SUPPORT else "-"
 
 
 # Tool icons

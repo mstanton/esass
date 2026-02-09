@@ -104,9 +104,9 @@ def analyze(days):
     log_store = LogStore(data_dir)
 
     if days:
-        end_date = datetime.utcnow().date()
+        end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        logs = log_store.load_by_date_range(start_date, end_date)
+        logs = log_store.read_date_range(start_date, end_date)
         click.echo(f"   Loaded logs from last {days} days")
     else:
         logs = log_store.load_all()
@@ -353,7 +353,7 @@ def monitor():
     RealtimeDisplay.print_header("ESASS Realtime Monitor")
     click.echo(f"  Watching: {log_file}")
     click.echo(f"  Press {Colors.BOLD}Ctrl+C{Colors.END} to stop\n")
-    click.echo(f"{Colors.DIM}{'─' * 60}{Colors.END}")
+    click.echo(f"{Colors.DIM}{Sym.HLINE * 60}{Colors.END}")
 
     # Track file position
     if log_file.exists():
@@ -384,7 +384,7 @@ def monitor():
             time.sleep(0.3)
 
     except KeyboardInterrupt:
-        click.echo(f"\n{Colors.DIM}{'─' * 60}{Colors.END}")
+        click.echo(f"\n{Colors.DIM}{Sym.HLINE * 60}{Colors.END}")
         click.echo(
             f"\n  {Colors.GREEN}{Sym.CHECK}{Colors.END} Captured {event_count} events this session"
         )
