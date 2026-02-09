@@ -203,12 +203,20 @@ class SkillAuditorApp(App):
         background: #991b1b;
         color: white;
     }
+    .action-bar-no-margin {
+        height: 3;
+        align: center middle;
+        background: #1e293b;
+        margin-top: 0;
+    }
     """
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("a", "approve", "Approve", show=True),
+        Binding("A", "approve_all", "Approve All", show=True),
         Binding("r", "reject", "Reject", show=True),
+        Binding("g", "generate_skills", "Generate Skills", show=True),
         Binding("f5", "refresh", "Refresh", show=True),
         Binding("s", "toggle_sidebar", "Toggle List", show=False),
     ]
@@ -264,6 +272,11 @@ class SkillAuditorApp(App):
                                     id="btn_reject",
                                     classes="btn-reject",
                                 )
+                                yield Button(
+                                    "Approve All (Shift+A)",
+                                    variant="primary",
+                                    id="btn_approve_all",
+                                )
 
             # Patterns Tab
             with TabPane("Patterns", id="patterns_tab"):
@@ -285,6 +298,32 @@ class SkillAuditorApp(App):
                                 id="pattern_detail_markdown",
                             )
 
+            # Verified Tab
+            with TabPane("Verified", id="verified_tab"):
+                with Horizontal(classes="pane-container"):
+                    with Vertical(classes="left-panel"):
+                        yield Label(
+                            "Crystallized Skills",
+                            id="verified_list_header",
+                            classes="list-header",
+                        )
+                        yield Input(
+                            placeholder="Search verified...", id="verified_filter"
+                        )
+                        yield ListView(id="verified_list")
+                        with Horizontal(classes="action-bar-no-margin"):
+                            yield Button(
+                                "Generate All (G)",
+                                variant="primary",
+                                id="btn_generate_verified",
+                            )
+                    with Vertical(classes="right-panel"):
+                        with Container(classes="detail-container"):
+                            yield Markdown(
+                                "Select a verified skill to view manifest",
+                                id="verified_detail_markdown",
+                            )
+
             # Monitor Tab
             with TabPane("Monitor", id="monitor_tab"):
                 with VerticalScroll():
@@ -295,9 +334,12 @@ class SkillAuditorApp(App):
     def on_mount(self) -> None:
         """Populate lists on mount."""
         self._refresh_skill_list()
+        self._refresh_verified_list()
         self._refresh_pattern_list()
         self._update_monitor_view()
-        self.query_one("#skill_actions").visible = False
+        # Single skill actions hidden initially, but bulk actions can be visible
+        self.query_one("#btn_approve").visible = False
+        self.query_one("#btn_reject").visible = False
 
     def _refresh_skill_list(self, filter_text: str = "") -> None:
         """Re-populate the skill list."""
@@ -347,6 +389,29 @@ class SkillAuditorApp(App):
             f"Pattern Archeology ({candidate_count} Candidates)"
         )
 
+    def _refresh_verified_list(self, filter_text: str = "") -> None:
+        """Re-populate the verified skill list."""
+        list_view = self.query_one("#verified_list", ListView)
+        list_view.clear()
+
+        verified = [s for s in self._all_skills if s.validation_status == "validated"]
+
+        filtered = [
+            s
+            for s in verified
+            if filter_text.lower() in s.name.lower()
+            or filter_text.lower() in s.description.lower()
+        ]
+
+        filtered.sort(key=lambda s: s.name)
+
+        for skill in filtered:
+            list_view.append(SkillListItem(skill))
+
+        self.query_one("#verified_list_header", Label).update(
+            f"Crystallized Skills ({len(verified)})"
+        )
+
     @on(Input.Changed, "#skill_filter")
     def on_skill_filter_changed(self, event: Input.Changed) -> None:
         self._refresh_skill_list(event.value)
@@ -355,6 +420,10 @@ class SkillAuditorApp(App):
     def on_pattern_filter_changed(self, event: Input.Changed) -> None:
         self._refresh_pattern_list(event.value)
 
+    @on(Input.Changed, "#verified_filter")
+    def on_verified_filter_changed(self, event: Input.Changed) -> None:
+        self._refresh_verified_list(event.value)
+
     @on(ListView.Selected, "#skill_list")
     def on_skill_selected(self, event: ListView.Selected):
         """Handle skill selection."""
@@ -362,7 +431,8 @@ class SkillAuditorApp(App):
         if isinstance(item, SkillListItem):
             self.current_skill = item.skill
             self._update_skill_detail()
-            self.query_one("#skill_actions").visible = True
+            self.query_one("#btn_approve").visible = True
+            self.query_one("#btn_reject").visible = True
 
     @on(ListView.Selected, "#pattern_list")
     def on_pattern_selected(self, event: ListView.Selected):
@@ -371,6 +441,14 @@ class SkillAuditorApp(App):
         if isinstance(item, PatternListItem):
             self.current_pattern = item.pattern
             self._update_pattern_detail()
+
+    @on(ListView.Selected, "#verified_list")
+    def on_verified_selected(self, event: ListView.Selected):
+        """Handle verified skill selection."""
+        item = event.item
+        if isinstance(item, SkillListItem):
+            self.current_skill = item.skill
+            self._update_verified_detail()
 
     def _update_skill_detail(self):
         """Update the skill detail panel with Markdown."""
@@ -558,6 +636,35 @@ class SkillAuditorApp(App):
         self._update_monitor_view()
         self.notify("Data refreshed from disk")
 
+    def action_approve_all(self):
+        """Approve all skills in the currently filtered list."""
+        if self.query_one("#main_tabs").active != "skills_tab":
+            return
+
+        list_view = self.query_one("#skill_list", ListView)
+        pending_items = [
+            item
+            for item in list_view.children
+            if isinstance(item, SkillListItem)
+            and item.skill.validation_status == "pending"
+        ]
+
+        if not pending_items:
+            self.notify(
+                "No pending skills to approve in current view", severity="warning"
+            )
+            return
+
+        count = len(pending_items)
+        for item in pending_items:
+            self.skill_store.update_validation_status(item.skill.skill_id, "validated")
+            item.skill.validation_status = "validated"
+            item.update_status()
+
+        self.notify(f"BULK APPROVED: {count} skills", severity="information")
+        self._update_monitor_view()
+        self._refresh_skill_list(self.query_one("#skill_filter").value)
+
     @on(Button.Pressed, "#btn_approve")
     def on_approve_pressed(self):
         self.action_approve()
@@ -565,6 +672,64 @@ class SkillAuditorApp(App):
     @on(Button.Pressed, "#btn_reject")
     def on_reject_pressed(self):
         self.action_reject()
+
+    @on(Button.Pressed, "#btn_approve_all")
+    def on_approve_all_pressed(self):
+        self.action_approve_all()
+
+    @on(Button.Pressed, "#btn_generate_verified")
+    def on_generate_verified_pressed(self):
+        self.action_generate_skills()
+
+    def action_generate_skills(self):
+        """Convert validated SkillManifests to Claude Project SKILL.md files."""
+        validated_skills = [
+            s for s in self._all_skills if s.validation_status == "validated"
+        ]
+
+        if not validated_skills:
+            self.notify("No validated skills found to generate", severity="warning")
+            return
+
+        try:
+            from esass_prototype.adapters.claude_formatter import ClaudeSkillFormatter
+
+            formatter = ClaudeSkillFormatter(output_dir=".claude/skills")
+
+            # Map patterns for formatter
+            pattern_map = {p.pattern_id: p for p in self._all_patterns}
+
+            paths = formatter.batch_convert(validated_skills, patterns=pattern_map)
+            self.notify(
+                f"SUCCESS: Generated {len(paths)} skills in .claude/skills",
+                severity="information",
+            )
+        except Exception as e:
+            self.notify(f"Generation error: {str(e)}", severity="error")
+
+    def _update_verified_detail(self):
+        """Update manifest preview for verified skills."""
+        if not self.current_skill:
+            return
+
+        try:
+            from esass_prototype.adapters.claude_formatter import ClaudeSkillFormatter
+
+            formatter = ClaudeSkillFormatter()
+            pattern = None
+            if self.current_skill.source_pattern_ids:
+                pattern_id = self.current_skill.source_pattern_ids[0]
+                pattern = next(
+                    (p for p in self._all_patterns if p.pattern_id == pattern_id), None
+                )
+
+            # Use raw markdown for preview
+            content = formatter.format_skill(self.current_skill, pattern)
+            self.query_one("#verified_detail_markdown", Markdown).update(content)
+        except Exception as e:
+            self.query_one("#verified_detail_markdown", Markdown).update(
+                f"Error generating preview: {e}"
+            )
 
 
 if __name__ == "__main__":
