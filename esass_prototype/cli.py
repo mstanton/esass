@@ -11,6 +11,11 @@ import click
 
 from esass_prototype.analysis.metrics import rank_patterns
 from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
+from esass_prototype.analysis.enhanced_pattern_detector import (
+    EnhancedPatternDetector,
+    SemanticTagExtractor,
+    analyze_with_enhanced_detection
+)
 from esass_prototype.config import get_config, get_data_dir, get_export_dir
 from esass_prototype.export.obsidian import ObsidianExporter
 from esass_prototype.genesis.candidate import SkillCandidacyEvaluator
@@ -93,12 +98,30 @@ def observe_stop():
 @click.option(
     "--days", default=None, type=int, help="Days of data to analyze (default: all)"
 )
-def analyze(days):
-    """Analyze logs and detect patterns"""
+@click.option(
+    "--enhanced/--basic", default=True, help="Use enhanced semantic detection (default: enhanced)"
+)
+@click.option(
+    "--granularity", type=click.Choice(['coarse', 'medium', 'fine']), default='medium',
+    help="Pattern granularity: coarse (categories), medium (tool+context), fine (all tags)"
+)
+@click.option(
+    "--min-support", default=3, type=int, help="Minimum pattern occurrences"
+)
+@click.option(
+    "--min-stability", default=1, type=int, help="Minimum days pattern must appear"
+)
+@click.option(
+    "--within-session/--cross-session", default=True,
+    help="Count patterns within same session (default) or only across sessions"
+)
+def analyze(days, enhanced, granularity, min_support, min_stability, within_session):
+    """Analyze logs and detect patterns with semantic enrichment"""
     config = get_config()
     data_dir = get_data_dir(config)
 
-    click.echo("[*] Analyzing observation logs...")
+    mode = "enhanced semantic" if enhanced else "basic"
+    click.echo(f"[*] Analyzing observation logs ({mode} mode, {granularity} granularity)...")
 
     # Load logs
     log_store = LogStore(data_dir)
@@ -114,14 +137,34 @@ def analyze(days):
 
     click.echo(f"   Processing {len(logs)} events...")
 
-    # Detect patterns
-    detector = TemporalPatternDetector(
-        min_support=config.pattern_detection.min_support,
-        min_confidence=config.pattern_detection.min_confidence,
-        min_stability_days=config.pattern_detection.min_stability_days,
-    )
+    if enhanced:
+        # Use enhanced detector with semantic extraction
+        detector = EnhancedPatternDetector(
+            min_support=min_support,
+            min_confidence=0.6,
+            min_stability_days=min_stability,
+            granularity=granularity,
+            count_within_session=within_session
+        )
+        patterns = detector.detect_patterns(logs)
 
-    patterns = detector.detect_patterns(logs)
+        # Show sample of semantic extraction
+        if logs and len(logs) > 0:
+            sample_entry = logs[0]
+            sample_tags = SemanticTagExtractor.extract_tags(sample_entry)
+            sample_key = SemanticTagExtractor.create_event_key(sample_entry, granularity)
+            click.echo(f"\n   Sample event extraction:")
+            click.echo(f"     Raw event_type: {sample_entry.event_type}")
+            click.echo(f"     Extracted tags: {sample_tags[:5]}")
+            click.echo(f"     Event key: {sample_key}")
+    else:
+        # Use basic detector
+        detector = TemporalPatternDetector(
+            min_support=config.pattern_detection.min_support,
+            min_confidence=config.pattern_detection.min_confidence,
+            min_stability_days=config.pattern_detection.min_stability_days,
+        )
+        patterns = detector.detect_patterns(logs)
 
     # Rank patterns
     patterns = rank_patterns(patterns)
@@ -132,23 +175,32 @@ def analyze(days):
 
     # Report
     candidates = [p for p in patterns if p.skill_candidate]
+    meaningful = [p for p in patterns if ':' in str(p.sequence)]
 
     click.echo("\n[OK] Analysis complete")
     click.echo(f"  Total patterns detected: {len(patterns)}")
+    click.echo(f"  Semantically meaningful: {len(meaningful)}")
     click.echo(f"  Skill candidates: {len(candidates)}")
 
     if patterns:
-        click.echo("\nTop 5 patterns by support:")
-        for i, pattern in enumerate(patterns[:5], 1):
+        click.echo("\nTop 10 patterns by support:")
+        for i, pattern in enumerate(patterns[:10], 1):
             status = "[OK]" if pattern.skill_candidate else "•"
-            click.echo(f"  {status} {i}. {pattern.description}")
+            # Show workflow tags if present
+            workflow_tags = [t for t in pattern.tags if t.endswith('_workflow') or t in ['git', 'testing', 'file_modification']]
+            workflow_str = f" [{', '.join(workflow_tags)}]" if workflow_tags else ""
+            click.echo(f"  {status} {i}. {pattern.description}{workflow_str}")
             click.echo(
                 f"     Support: {pattern.support}, Confidence: {pattern.confidence:.0%}, Stability: {pattern.stability_days}d"
             )
 
 
 @esass.command("generate-skills")
-def generate_skills():
+@click.option("--min-support", default=5, type=int, help="Minimum pattern occurrences")
+@click.option("--min-stability", default=1, type=int, help="Minimum days pattern must appear")
+@click.option("--min-confidence", default=0.6, type=float, help="Minimum confidence score")
+@click.option("--use-enhanced/--use-stored", default=True, help="Use enhanced pattern detector")
+def generate_skills(min_support, min_stability, min_confidence, use_enhanced):
     """Generate skill manifests from validated patterns"""
     config = get_config()
     data_dir = get_data_dir(config)
@@ -161,16 +213,16 @@ def generate_skills():
 
     click.echo(f"   Loaded {len(patterns)} patterns")
 
-    # Evaluate candidacy
+    # Use relaxed criteria for development
     evaluator = SkillCandidacyEvaluator(
-        min_support=config.pattern_detection.min_support,
-        min_confidence=config.pattern_detection.min_confidence,
-        min_stability_days=config.pattern_detection.min_stability_days,
+        min_support=min_support,
+        min_confidence=min_confidence,
+        min_stability_days=min_stability,
     )
 
     candidates = evaluator.filter_candidates(patterns)
 
-    click.echo(f"   Found {len(candidates)} skill candidates")
+    click.echo(f"   Found {len(candidates)} skill candidates (support>={min_support}, stability>={min_stability}d)")
 
     if not candidates:
         click.echo("\nWARNING: No patterns meet skill candidacy criteria")

@@ -85,7 +85,13 @@ class SkillTemplateGenerator:
         # Get first event in sequence
         if pattern.sequence:
             first_event = pattern.sequence[0]
-            event_type, tags = first_event.split(':', 1)
+
+            # Handle both "event_type:tags" and "event_type" formats
+            if ':' in first_event:
+                event_type, tags = first_event.split(':', 1)
+            else:
+                event_type = first_event
+                tags = "none"
 
             # Create semantic trigger from tags
             if tags != "none":
@@ -115,7 +121,12 @@ class SkillTemplateGenerator:
 
         # Analyze sequence for capability indicators
         for event in pattern.sequence:
-            event_type, tags = event.split(':', 1)
+            # Handle both "event_type:tags" and "event_type" formats
+            if ':' in event:
+                event_type, tags = event.split(':', 1)
+            else:
+                event_type = event
+                tags = ""
 
             # Git operations
             if "git" in tags:
@@ -198,7 +209,12 @@ class SkillTemplateGenerator:
         steps = []
 
         for i, event in enumerate(pattern.sequence, 1):
-            event_type, tags = event.split(':', 1)
+            # Handle both "event_type:tags" and "event_type" formats
+            if ':' in event:
+                event_type, tags = event.split(':', 1)
+            else:
+                event_type = event
+                tags = "none"
 
             # Create human-readable step
             tag_list = tags.split(',') if tags != "none" else []

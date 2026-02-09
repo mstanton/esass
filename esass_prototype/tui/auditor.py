@@ -1,20 +1,27 @@
-from typing import Optional
+"""ESASS Skill Auditor TUI - Human-in-the-Middle Review Interface."""
 
+from datetime import datetime
+from typing import List, Optional
+
+from rich.panel import Panel
+from rich.text import Text
+from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.binding import Binding
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
-    Header,
+    Button,
     Footer,
-    ListView,
-    ListItem,
-    Static,
+    Header,
+    Input,
     Label,
+    ListItem,
+    ListView,
+    Markdown,
+    Static,
     TabbedContent,
     TabPane,
-    DataTable,
 )
-from textual.binding import Binding
-from textual import on
 
 from ..config import get_config, get_data_dir
 from ..storage.skill_store import SkillStore
@@ -23,211 +30,187 @@ from ..storage.pattern_store import PatternStore
 from ..models import SkillManifest, PatternDefinition
 
 
-class SkillItem(ListItem):
-    """A list item representing a skill."""
+class SkillListItem(ListItem):
+    """Custom ListItem for skills with reactive status."""
 
     def __init__(self, skill: SkillManifest):
         super().__init__()
         self.skill = skill
+        self.label = Label(self._get_display_text())
+
+    def _get_display_text(self) -> Text:
+        status = self.skill.validation_status
+        if status == "pending":
+            style = "yellow"
+            status_text = "[P]"
+        elif status == "validated":
+            style = "green"
+            status_text = "[OK]"
+        else:
+            style = "red"
+            status_text = "[X]"
+
+        text = Text()
+        text.append(f"{status_text} ", style=f"bold {style}")
+        text.append(self.skill.name, style="white")
+        return text
 
     def compose(self) -> ComposeResult:
-        status_icon = (
-            "⏳"
-            if self.skill.validation_status == "pending"
-            else ("✅" if self.skill.validation_status == "validated" else "❌")
-        )
-        yield Label(f"{status_icon} {self.skill.name}")
+        yield self.label
+
+    def update_status(self):
+        self.label.update(self._get_display_text())
 
 
-class SkillDetail(Static):
-    """A widget to display skill details."""
-
-    def update_skill(self, skill: SkillManifest):
-        status_color = (
-            "yellow"
-            if skill.validation_status == "pending"
-            else ("green" if skill.validation_status == "validated" else "red")
-        )
-
-        content = f"""
-# {skill.name}
-**Status:** [{status_color}]{skill.validation_status}[/]
-**ID:** {skill.skill_id}
-**Created:** {skill.created_at}
-
-## Description
-{skill.description}
-
-## Implementation Summary
-{skill.implementation_summary}
-
-## Triggers
-{", ".join(skill.triggers)}
-
-## Capabilities
-{", ".join(skill.capabilities)}
-
-## Tags
-{", ".join(skill.tags)}
-"""
-        self.update(content)
-
-
-class PatternItem(ListItem):
-    """A list item representing a pattern."""
+class PatternListItem(ListItem):
+    """Custom ListItem for patterns."""
 
     def __init__(self, pattern: PatternDefinition):
         super().__init__()
         self.pattern = pattern
+        self.label = Label(self._get_display_text())
+
+    def _get_display_text(self) -> Text:
+        icon = "󰄲 " if self.pattern.skill_candidate else "󰄱 "
+        style = "cyan" if self.pattern.skill_candidate else "dim"
+
+        desc = (
+            self.pattern.description[:45] + "..."
+            if len(self.pattern.description) > 45
+            else self.pattern.description
+        )
+
+        text = Text()
+        text.append(f"{icon} ", style=style)
+        text.append(desc, style="white")
+        return text
 
     def compose(self) -> ComposeResult:
-        candidate_icon = "⭐" if self.pattern.skill_candidate else "•"
-        yield Label(f"{candidate_icon} {self.pattern.description}")
-
-
-class PatternDetail(Static):
-    """A widget to display pattern details."""
-
-    def update_pattern(self, pattern: PatternDefinition):
-        candidate_status = "[green]YES[/]" if pattern.skill_candidate else "[red]NO[/]"
-
-        content = f"""
-# Pattern Details
-**Description:** {pattern.description}
-**ID:** {pattern.pattern_id}
-**Is Skill Candidate:** {candidate_status}
-
-## Metrics
-- **Support:** {pattern.support}
-- **Confidence:** {pattern.confidence:.1%}
-- **Stability:** {pattern.stability_days} days
-
-## Event Sequence
-"""
-        for i, step in enumerate(pattern.sequence, 1):
-            content += f"{i}. {step}\n"
-
-        content += f"""
-## Metadata
-- **First Seen:** {pattern.first_seen}
-- **Last Seen:** {pattern.last_seen}
-"""
-        self.update(content)
-
-
-class MonitoringDashboard(VerticalScroll):
-    """Aggregate statistics and health metrics."""
-
-    def __init__(
-        self, skill_store: SkillStore, log_store: LogStore, pattern_store: PatternStore
-    ):
-        super().__init__()
-        self.skill_store = skill_store
-        self.log_store = log_store
-        self.pattern_store = pattern_store
-
-    def on_mount(self):
-        self.update_stats()
-
-    def update_stats(self):
-        skill_stats = self.skill_store.get_stats()
-        log_stats = self.log_store.get_stats()
-        pattern_stats = self.pattern_store.get_stats()
-
-        summary = f"""
-# ESASS System Monitoring
-
-## Pattern Discovery
-- **Total Patterns:** {pattern_stats.get("total_patterns", 0)}
-- **Skill Candidates:** {pattern_stats.get("skill_candidates", 0)}
-- **Avg Confidence:** {pattern_stats.get("avg_confidence", 0):.1%}
-
-## Skill Evolution
-- **Total Skills:** {skill_stats.get("total_skills", 0)}
-- **Pending Audit:** {skill_stats.get("by_status", {}).get("pending", 0)}
-- **Validated:** {skill_stats.get("by_status", {}).get("validated", 0)}
-
-## Observation Fidelity
-- **Total Events:** {log_stats.get("total_entries", 0)}
-- **Sessions Tracked:** {log_stats.get("total_sessions", 0)}
-"""
-        self.query_one("#monitor_summary").update(summary)
-
-        # Update capabilities table
-        table = self.query_one(DataTable)
-        table.clear()
-        table.add_columns("Capability", "Count")
-
-        all_skills = self.skill_store.load_all()
-        cap_counts = {}
-        for s in all_skills:
-            for cap in s.capabilities:
-                cap_counts[cap] = cap_counts.get(cap, 0) + 1
-
-        for cap, count in sorted(cap_counts.items(), key=lambda x: x[1], reverse=True):
-            table.add_row(cap, str(count))
-
-    def compose(self) -> ComposeResult:
-        yield Static(id="monitor_summary")
-        yield Label("\n[bold]Skill Distribution by Capability[/]")
-        yield DataTable()
+        yield self.label
 
 
 class SkillAuditorApp(App):
     """ESASS Skill Auditor TUI."""
 
     TITLE = "ESASS Skill Auditor"
-    SUB_TITLE = "Human-in-the-Middle Auditing & Monitoring"
+    SUB_TITLE = "Human-in-the-Middle Auditing"
 
     CSS = """
     Screen {
-        background: $surface;
+        background: #0f172a;
     }
-    
-    #main_container, #pattern_container {
+
+    Header {
+        background: #1e293b;
+        color: #38bdf8;
+        text-style: bold;
+    }
+
+    Footer {
+        background: #1e293b;
+    }
+
+    .pane-container {
         height: 100%;
     }
-    
-    .sidebar {
-        width: 30%;
+
+    .left-panel {
+        width: 35%;
         height: 100%;
-        border-right: tall blue;
-        background: $surface;
+        border-right: tall #334155;
+        padding: 0 1;
     }
-    
-    .content {
-        width: 70%;
+
+    .right-panel {
+        width: 65%;
         height: 100%;
+        padding: 0 1;
+    }
+
+    #skill_list, #pattern_list {
+        height: 1fr;
+        border: solid #334155;
+        background: #1e293b;
+    }
+
+    #skill_list ListItem, #pattern_list ListItem {
+        padding: 0 1;
+    }
+
+    #skill_list ListItem:hover, #pattern_list ListItem:hover {
+        background: #334155;
+    }
+
+    #skill_list ListItem.--highlight, #pattern_list ListItem.--highlight {
+        background: #0ea5e9;
+        color: white;
+    }
+
+    .detail-container {
+        height: 100%;
+        border: solid #334155;
+        background: #1e293b;
         padding: 1;
     }
 
-    ListView {
-        background: $surface;
+    #skill_detail_markdown, #pattern_detail_markdown {
+        height: 1fr;
+        overflow-y: scroll;
     }
 
-    SkillDetail, PatternDetail {
-        padding: 1;
-        background: $boost;
-        border: round blue;
+    .list-header {
+        padding: 1 0;
+        color: #38bdf8;
     }
-    
-    MonitoringDashboard {
-        padding: 1;
+
+    Input {
+        margin: 1 0;
+        border: solid #334155;
+        background: #0f172a;
     }
-    
-    DataTable {
-        height: auto;
-        max-height: 20;
-        border: round blue;
+
+    Input:focus {
+        border: double #38bdf8;
+    }
+
+    TabbedContent {
+        height: 1fr;
+    }
+
+    TabPane {
+        padding: 0;
+    }
+
+    #monitor_content {
+        padding: 1;
+        background: #1e293b;
+        border: solid #334155;
+    }
+
+    .action-bar {
+        height: 3;
+        align: center middle;
+        background: #1e293b;
+        margin-top: 1;
+    }
+
+    .btn-approve {
+        background: #166534;
+        color: white;
+    }
+
+    .btn-reject {
+        background: #991b1b;
+        color: white;
     }
     """
 
     BINDINGS = [
-        Binding("q", "quit", "Quit", show=True),
-        Binding("a", "approve", "Approve Skill", show=True, key_display="A"),
-        Binding("r", "reject", "Reject Skill", show=True, key_display="R"),
-        Binding("p", "pending", "Set Pending", show=True, key_display="P"),
-        Binding("refresh", "refresh", "Refresh Data", show=True, key_display="F5"),
+        Binding("q", "quit", "Quit"),
+        Binding("a", "approve", "Approve", show=True),
+        Binding("r", "reject", "Reject", show=True),
+        Binding("f5", "refresh", "Refresh", show=True),
+        Binding("s", "toggle_sidebar", "Toggle List", show=False),
     ]
 
     def __init__(self):
@@ -237,113 +220,351 @@ class SkillAuditorApp(App):
         self.skill_store = SkillStore(data_dir)
         self.log_store = LogStore(data_dir)
         self.pattern_store = PatternStore(data_dir)
+
+        self._all_skills: List[SkillManifest] = []
+        self._all_patterns: List[PatternDefinition] = []
         self.current_skill: Optional[SkillManifest] = None
         self.current_pattern: Optional[PatternDefinition] = None
 
     def compose(self) -> ComposeResult:
+        # Load initial data
+        self._all_skills = self.skill_store.load_all()
+        self._all_patterns = self.pattern_store.load_all()
+
         yield Header()
-        with TabbedContent():
-            with TabPane("Skill Auditing", id="audit_tab"):
-                with Horizontal(id="main_container"):
-                    with Vertical(classes="sidebar"):
-                        yield Label("[bold]Skills[/]")
+
+        with TabbedContent(id="main_tabs"):
+            # Skills Tab
+            with TabPane("Skills", id="skills_tab"):
+                with Horizontal(classes="pane-container"):
+                    with Vertical(classes="left-panel"):
+                        yield Label(
+                            "Skill Discovery",
+                            id="skill_list_header",
+                            classes="list-header",
+                        )
+                        yield Input(placeholder="Filter skills...", id="skill_filter")
                         yield ListView(id="skill_list")
-                    with Vertical(classes="content"):
-                        yield SkillDetail(id="skill_detail")
-            with TabPane("Pattern Discovery", id="pattern_tab"):
-                with Horizontal(id="pattern_container"):
-                    with Vertical(classes="sidebar"):
-                        yield Label("[bold]Detected Patterns[/]")
+                    with Vertical(classes="right-panel"):
+                        with Container(classes="detail-container"):
+                            yield Markdown(
+                                "Select a skill to view details",
+                                id="skill_detail_markdown",
+                            )
+                            with Horizontal(classes="action-bar", id="skill_actions"):
+                                yield Button(
+                                    "Approve (A)",
+                                    variant="success",
+                                    id="btn_approve",
+                                    classes="btn-approve",
+                                )
+                                yield Button(
+                                    "Reject (R)",
+                                    variant="error",
+                                    id="btn_reject",
+                                    classes="btn-reject",
+                                )
+
+            # Patterns Tab
+            with TabPane("Patterns", id="patterns_tab"):
+                with Horizontal(classes="pane-container"):
+                    with Vertical(classes="left-panel"):
+                        yield Label(
+                            "Pattern Archeology",
+                            id="pattern_list_header",
+                            classes="list-header",
+                        )
+                        yield Input(
+                            placeholder="Filter patterns...", id="pattern_filter"
+                        )
                         yield ListView(id="pattern_list")
-                    with Vertical(classes="content"):
-                        yield PatternDetail(id="pattern_detail")
-            with TabPane("System Monitoring", id="monitor_tab"):
-                yield MonitoringDashboard(
-                    self.skill_store, self.log_store, self.pattern_store
-                )
+                    with Vertical(classes="right-panel"):
+                        with Container(classes="detail-container"):
+                            yield Markdown(
+                                "Select a pattern to view details",
+                                id="pattern_detail_markdown",
+                            )
+
+            # Monitor Tab
+            with TabPane("Monitor", id="monitor_tab"):
+                with VerticalScroll():
+                    yield Static(id="monitor_content")
+
         yield Footer()
 
-    def on_mount(self):
-        self.refresh_skill_list()
-        self.refresh_pattern_list()
+    def on_mount(self) -> None:
+        """Populate lists on mount."""
+        self._refresh_skill_list()
+        self._refresh_pattern_list()
+        self._update_monitor_view()
+        self.query_one("#skill_actions").visible = False
 
-    def refresh_skill_list(self):
-        skill_list = self.query_one("#skill_list", ListView)
-        skill_list.clear()
+    def _refresh_skill_list(self, filter_text: str = "") -> None:
+        """Re-populate the skill list."""
+        list_view = self.query_one("#skill_list", ListView)
+        list_view.clear()
 
-        skills = self.skill_store.load_all()
-        for skill in skills:
-            skill_list.append(SkillItem(skill))
+        # Sort: pending first, then by name
+        status_priority = {"pending": 0, "validated": 1, "rejected": 2}
 
-    def refresh_pattern_list(self):
-        pattern_list = self.query_one("#pattern_list", ListView)
-        pattern_list.clear()
+        filtered = [
+            s
+            for s in self._all_skills
+            if filter_text.lower() in s.name.lower()
+            or filter_text.lower() in s.description.lower()
+        ]
 
-        patterns = self.pattern_store.load_all()
-        for pattern in patterns:
-            pattern_list.append(PatternItem(pattern))
+        filtered.sort(
+            key=lambda s: (status_priority.get(s.validation_status, 3), s.name)
+        )
 
-    @on(ListView.Selected)
-    def on_item_selected(self, event: ListView.Selected):
-        if isinstance(event.item, SkillItem):
-            self.current_skill = event.item.skill
-            self.query_one("#skill_detail", SkillDetail).update_skill(
-                self.current_skill
-            )
-        elif isinstance(event.item, PatternItem):
-            self.current_pattern = event.item.pattern
-            self.query_one("#pattern_detail", PatternDetail).update_pattern(
-                self.current_pattern
-            )
+        for skill in filtered:
+            list_view.append(SkillListItem(skill))
+
+        pending_count = sum(
+            1 for s in self._all_skills if s.validation_status == "pending"
+        )
+        self.query_one("#skill_list_header", Label).update(
+            f"Skill Discovery ({pending_count} Pending)"
+        )
+
+    def _refresh_pattern_list(self, filter_text: str = "") -> None:
+        """Re-populate the pattern list."""
+        list_view = self.query_one("#pattern_list", ListView)
+        list_view.clear()
+
+        filtered = [
+            p
+            for p in self._all_patterns
+            if filter_text.lower() in p.description.lower()
+        ]
+
+        for pattern in filtered:
+            list_view.append(PatternListItem(pattern))
+
+        candidate_count = sum(1 for p in self._all_patterns if p.skill_candidate)
+        self.query_one("#pattern_list_header", Label).update(
+            f"Pattern Archeology ({candidate_count} Candidates)"
+        )
+
+    @on(Input.Changed, "#skill_filter")
+    def on_skill_filter_changed(self, event: Input.Changed) -> None:
+        self._refresh_skill_list(event.value)
+
+    @on(Input.Changed, "#pattern_filter")
+    def on_pattern_filter_changed(self, event: Input.Changed) -> None:
+        self._refresh_pattern_list(event.value)
+
+    @on(ListView.Selected, "#skill_list")
+    def on_skill_selected(self, event: ListView.Selected):
+        """Handle skill selection."""
+        item = event.item
+        if isinstance(item, SkillListItem):
+            self.current_skill = item.skill
+            self._update_skill_detail()
+            self.query_one("#skill_actions").visible = True
+
+    @on(ListView.Selected, "#pattern_list")
+    def on_pattern_selected(self, event: ListView.Selected):
+        """Handle pattern selection."""
+        item = event.item
+        if isinstance(item, PatternListItem):
+            self.current_pattern = item.pattern
+            self._update_pattern_detail()
+
+    def _update_skill_detail(self):
+        """Update the skill detail panel with Markdown."""
+        if not self.current_skill:
+            return
+
+        skill = self.current_skill
+
+        status_color = (
+            "yellow"
+            if skill.validation_status == "pending"
+            else ("green" if skill.validation_status == "validated" else "red")
+        )
+
+        # Triggers section
+        triggers_md = ""
+        for t in skill.triggers:
+            if hasattr(t, "trigger_type"):
+                triggers_md += f"* **{t.trigger_type}**: `{t.pattern}`\n"
+            else:
+                triggers_md += f"* {t}\n"
+
+        capabilities = (
+            ", ".join([f"`{c}`" for c in skill.capabilities])
+            if skill.capabilities
+            else "*None*"
+        )
+
+        status_val = skill.validation_status.upper()
+        status_md = (
+            f"**Status**: <span style='color: {status_color}; "
+            f"font-weight: bold;'>{status_val}</span>"
+        )
+
+        md = f"""
+# {skill.name}
+{status_md}
+**Version**: `{skill.version}` | **Genesis**: `{skill.genesis_type}`
+
+### Description
+{skill.description}
+
+### Triggers
+{triggers_md}
+
+### Capabilities
+{capabilities}
+
+### Implementation Summary
+```text
+{skill.implementation_summary}
+```
+
+### Statistics
+* **Usage Count**: {skill.usage_count}
+* **Success Rate**: {skill.success_rate:.1%}
+* **ID**: `{skill.skill_id}`
+* **Created**: {skill.created_at}
+
+---
+*Press **A** to Approve or **R** to Reject*
+"""
+        self.query_one("#skill_detail_markdown", Markdown).update(md)
+
+    def _update_pattern_detail(self):
+        """Update the pattern detail panel."""
+        if not self.current_pattern:
+            return
+
+        p = self.current_pattern
+
+        seq_md = "\n".join([f"{i + 1}. `{step}`" for i, step in enumerate(p.sequence)])
+
+        md = f"""
+# Pattern Details
+**ID**: `{p.pattern_id}`
+**Candidacy**: {"✅ **Skill Candidate**" if p.skill_candidate else "❌ Not a candidate"}
+
+### Description
+{p.description}
+
+### Metrics
+| Metric | Value |
+|--------|-------|
+| Support | {p.support} |
+| Confidence | {p.confidence:.1%} |
+| Stability | {p.stability_days} days |
+
+### Event Sequence
+{seq_md}
+
+### Timeline
+* **First Seen**: {p.first_seen}
+* **Last Seen**: {p.last_seen}
+
+### Tags
+{", ".join([f"`{t}`" for t in p.tags]) if p.tags else "*None*"}
+"""
+        self.query_one("#pattern_detail_markdown", Markdown).update(md)
+
+    def _update_monitor_view(self):
+        """Update the monitoring dashboard view."""
+        log_stats = self.log_store.get_stats()
+
+        pending = sum(1 for s in self._all_skills if s.validation_status == "pending")
+        validated = sum(
+            1 for s in self._all_skills if s.validation_status == "validated"
+        )
+        rejected = sum(1 for s in self._all_skills if s.validation_status == "rejected")
+
+        content = f"""
+[bold cyan]ESASS SYSTEM MONITOR[/bold cyan]
+{"━" * 40}
+
+[bold]Skill Statistics[/bold]
+  Total Skills:   {len(self._all_skills)}
+  [yellow]Pending:        {pending}[/yellow]
+  [green]Validated:      {validated}[/green]
+  [red]Rejected:       {rejected}[/red]
+
+[bold]Pattern Statistics[/bold]
+  Total Patterns: {len(self._all_patterns)}
+  Candidates:     {sum(1 for p in self._all_patterns if p.skill_candidate)}
+
+[bold]Log Statistics[/bold]
+  Total Events:   {log_stats.get("total_entries", 0)}
+  Total Sessions: {log_stats.get("total_sessions", 0)}
+
+[bold]Environment[/bold]
+  Data Dir:       {self.skill_store.data_dir}
+  Last Refresh:   {datetime.now().strftime("%H:%M:%S")}
+"""
+        self.query_one("#monitor_content", Static).update(
+            Panel(content, border_style="blue")
+        )
 
     def action_approve(self):
-        if self.current_skill:
+        """Approve the current skill."""
+        if self.current_skill and self.query_one("#main_tabs").active == "skills_tab":
             self.skill_store.update_validation_status(
                 self.current_skill.skill_id, "validated"
             )
-            self.notify(f"Skill '{self.current_skill.name}' approved ✅")
-            self._reload_and_refresh()
+            self.current_skill.validation_status = "validated"
+            self.notify(f"APPROVED: {self.current_skill.name}", severity="information")
+
+            # Update the list item without refreshing the whole list
+            for item in self.query_one("#skill_list").children:
+                if (
+                    isinstance(item, SkillListItem)
+                    and item.skill.skill_id == self.current_skill.skill_id
+                ):
+                    item.update_status()
+                    break
+
+            self._update_skill_detail()
+            self._update_monitor_view()
 
     def action_reject(self):
-        if self.current_skill:
+        """Reject the current skill."""
+        if self.current_skill and self.query_one("#main_tabs").active == "skills_tab":
             self.skill_store.update_validation_status(
                 self.current_skill.skill_id, "rejected"
             )
-            self.notify(f"Skill '{self.current_skill.name}' rejected ❌")
-            self._reload_and_refresh()
+            self.current_skill.validation_status = "rejected"
+            self.notify(f"REJECTED: {self.current_skill.name}", severity="warning")
 
-    def action_pending(self):
-        if self.current_skill:
-            self.skill_store.update_validation_status(
-                self.current_skill.skill_id, "pending"
-            )
-            self.notify(f"Skill '{self.current_skill.name}' set to pending ⏳")
-            self._reload_and_refresh()
+            # Update the list item
+            for item in self.query_one("#skill_list").children:
+                if (
+                    isinstance(item, SkillListItem)
+                    and item.skill.skill_id == self.current_skill.skill_id
+                ):
+                    item.update_status()
+                    break
+
+            self._update_skill_detail()
+            self._update_monitor_view()
 
     def action_refresh(self):
-        self._reload_and_refresh()
-        self.notify("Data refreshed")
+        """Refresh all data from disk."""
+        self._all_skills = self.skill_store.load_all()
+        self._all_patterns = self.pattern_store.load_all()
+        self._refresh_skill_list(self.query_one("#skill_filter").value)
+        self._refresh_pattern_list(self.query_one("#pattern_filter").value)
+        self._update_monitor_view()
+        self.notify("Data refreshed from disk")
 
-    def _reload_and_refresh(self):
-        # Refresh skills
-        skill_list = self.query_one("#skill_list", ListView)
-        s_index = skill_list.index
-        self.refresh_skill_list()
-        if s_index is not None:
-            skill_list.index = s_index
+    @on(Button.Pressed, "#btn_approve")
+    def on_approve_pressed(self):
+        self.action_approve()
 
-        # Refresh patterns
-        pattern_list = self.query_one("#pattern_list", ListView)
-        p_index = pattern_list.index
-        self.refresh_pattern_list()
-        if p_index is not None:
-            pattern_list.index = p_index
-
-        # Update monitoring tab if it exists
-        try:
-            self.query_one(MonitoringDashboard).update_stats()
-        except Exception:
-            pass
+    @on(Button.Pressed, "#btn_reject")
+    def on_reject_pressed(self):
+        self.action_reject()
 
 
 if __name__ == "__main__":
