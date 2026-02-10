@@ -122,6 +122,72 @@ Observations → Logging → Pattern Recognition → Skill Genesis → Evolution
 
 6. **Self-Documentation Substrate (SDS)**: Auto-generates skill manifests, decision journals, evolution timelines
 
+7. **Local LLM Integration**: Cost-optimized skill execution via 3-tier routing:
+   - Tier 1 (Local): Ollama + gemma3:4b for 70%+ of tasks (~$0 cost)
+   - Tier 2 (HuggingFace): Cloud fallback for medium complexity
+   - Tier 3 (Claude): Reserved for critical/security tasks
+
+### Local LLM Integration
+
+ESASS includes a local LLM system to reduce Claude API costs by 70-99%.
+
+**Quick Start:**
+```bash
+# 1. Start Ollama with gemma3:4b
+ollama serve
+ollama pull gemma3:4b
+
+# 2. Test the system
+cd esass/local-llm-mcp
+python test_comprehensive.py
+```
+
+**Architecture:**
+```
+┌────────────────────────────────────────────────────────────┐
+│ Claude Code (orchestrator)                                 │
+│   Routes tasks based on capability scores                  │
+└────────────────────┬───────────────────────────────────────┘
+                     │
+    ┌────────────────┼────────────────┐
+    ▼                ▼                ▼
+┌────────┐    ┌────────────┐    ┌─────────┐
+│ Local  │    │ HuggingFace│    │ Claude  │
+│ gemma3 │    │ Mistral-7B │    │ (pass)  │
+│ ~$0    │    │ ~$1/M tok  │    │ $15/M   │
+└────────┘    └────────────┘    └─────────┘
+```
+
+**Capability Routing:**
+| Capability | Score | Tier |
+|------------|-------|------|
+| file_operations | 0.95 | Local |
+| testing | 0.85 | Local |
+| git_operations | 0.80 | Local |
+| security | 0.10 | Claude |
+
+**Cost Savings Example:**
+```
+100 daily executions (70% local, 20% HF, 10% Claude):
+  Actual cost:     $3.27/month
+  If all Claude:   $27.74/month
+  Savings:         $24.47/month (88%)
+```
+
+**Adaptive Learning:**
+- System tracks success/failure rates per skill
+- Automatically demotes failing skills to higher tiers
+- Promotes successful skills back to local after recovery
+
+**MCP Tools Available:**
+- `execute_skill` - Run skill via local LLM
+- `analyze_pattern` - Semantic pattern analysis
+- `generate_skill_name` - Create meaningful names
+- `get_cost_dashboard` - Cost analytics
+- `get_adaptive_status` - Learning status
+
+See `esass/local-llm-mcp/README.md` for full documentation.
+
 ### Evolution System Components
 
 The evolution system implements meta-learning through:
