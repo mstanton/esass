@@ -2,12 +2,16 @@
 Skill template generator - creates skill manifests from validated patterns.
 
 Template-based generation following §6.3 of specification.
+Enhanced with local LLM integration for semantic skill naming.
 """
 
+import logging
 from collections import Counter
-from typing import List
+from typing import List, Optional
 
 from esass_prototype.models import PatternDefinition, SkillManifest
+
+logger = logging.getLogger(__name__)
 
 
 class SkillTemplateGenerator:
@@ -167,13 +171,16 @@ class SkillTemplateGenerator:
         """
         Generate skill name from pattern.
 
+        Uses local LLM for semantic naming if available,
+        falls back to tag-based naming otherwise.
+
         Args:
             pattern: PatternDefinition
 
         Returns:
             Skill name
         """
-        # Extract dominant tags
+        # Extract tags for fallback and context
         all_tags = []
         for event in pattern.sequence:
             if ':' in event:
@@ -183,14 +190,58 @@ class SkillTemplateGenerator:
 
         # Find most common tags
         tag_counts = Counter(all_tags)
-        top_tags = [tag for tag, _ in tag_counts.most_common(2)]
+        top_tags = [tag for tag, _ in tag_counts.most_common(3)]
 
+        # Try local LLM first
+        llm_name = self._generate_name_with_llm(pattern, top_tags)
+        if llm_name:
+            return llm_name
+
+        # Fallback to tag-based naming
         if len(top_tags) >= 2:
             return f"{top_tags[0]}_{top_tags[1]}_skill"
         elif len(top_tags) == 1:
             return f"{top_tags[0]}_workflow_skill"
         else:
             return f"pattern_{pattern.pattern_id[:8]}_skill"
+
+    def _generate_name_with_llm(
+        self,
+        pattern: PatternDefinition,
+        tags: List[str]
+    ) -> Optional[str]:
+        """
+        Generate skill name using local LLM.
+
+        Args:
+            pattern: PatternDefinition
+            tags: Extracted tags
+
+        Returns:
+            LLM-generated name or None if unavailable
+        """
+        try:
+            from esass_prototype.integrations.local_llm import generate_skill_name_sync
+
+            name = generate_skill_name_sync(
+                pattern_description=pattern.description,
+                tags=tags + pattern.tags,
+                sequence=pattern.sequence,
+            )
+
+            # Validate name
+            if name and len(name) > 6 and name.endswith("_skill"):
+                # Avoid generic/fallback names
+                if not name.startswith("pattern_") and name != "workflow_skill":
+                    logger.debug(f"LLM generated skill name: {name}")
+                    return name
+
+        except ImportError:
+            logger.debug("Local LLM integration not available")
+        except Exception as e:
+            logger.debug(f"LLM skill naming failed: {e}")
+
+        return None
 
     def _generate_implementation_summary(
         self,

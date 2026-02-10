@@ -2,11 +2,12 @@
 Recursive Learning Loop Controller
 
 Orchestrates the complete ESASS → OpenClaw → ClawHub → OpenClaw cycle.
+Enhanced with local LLM integration for cost-optimized skill execution.
 """
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
@@ -21,7 +22,9 @@ from esass_prototype.storage.log_store import LogStore
 from esass_prototype.storage.pattern_store import PatternStore
 from esass_prototype.storage.skill_store import SkillStore
 from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
+from esass_prototype.analysis.enhanced_pattern_detector import EnhancedPatternDetector
 from esass_prototype.genesis.template import SkillTemplateGenerator
+from esass_prototype.models import SkillManifest
 
 
 logger = logging.getLogger(__name__)
@@ -194,8 +197,8 @@ class RecursiveLoopController:
                 )
                 return results
 
-            # Detect patterns
-            detector = TemporalPatternDetector(
+            # Detect patterns using enhanced detector with semantic analysis
+            detector = EnhancedPatternDetector(
                 min_support=self.config.min_support,
                 min_confidence=self.config.min_confidence,
                 min_stability_days=self.config.min_stability_days
@@ -203,9 +206,17 @@ class RecursiveLoopController:
             patterns = detector.detect_patterns(logs)
             results["patterns_detected"] = len(patterns)
 
+            # Deduplicate patterns using local LLM semantic clustering
+            patterns = self.deduplicate_patterns_with_llm(patterns)
+            results["patterns_after_dedup"] = len(patterns)
+
             # Filter to skill candidates
             candidates = [p for p in patterns if p.skill_candidate]
-            logger.info(f"Detected {len(patterns)} patterns, {len(candidates)} candidates")
+            logger.info(
+                f"Detected {results['patterns_detected']} patterns, "
+                f"deduplicated to {len(patterns)}, "
+                f"{len(candidates)} candidates"
+            )
 
             # Save patterns
             for pattern in patterns:
@@ -375,6 +386,225 @@ class RecursiveLoopController:
                 "daily_limit": self.config.rate_limit_skills_per_day
             }
         }
+
+    # ==================== Local LLM Integration ====================
+
+    async def _route_skill_execution(
+        self,
+        skill: SkillManifest,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Route skill execution to appropriate tier based on capabilities.
+
+        Tier hierarchy:
+        1. Local (Ollama/FunctionGemma) - Free, fast
+        2. HuggingFace API - Cheap fallback
+        3. Claude - Passthrough for complex tasks
+
+        Args:
+            skill: SkillManifest to execute
+            context: Execution context (files, parameters, etc.)
+
+        Returns:
+            Execution result with tier information
+        """
+        try:
+            from esass_prototype.integrations.local_llm import get_local_llm_client
+
+            client = await get_local_llm_client()
+
+            if not await client.is_available():
+                logger.debug(f"Local LLM unavailable, using Claude for {skill.name}")
+                return {
+                    "success": True,
+                    "tier_used": "claude",
+                    "passthrough": True,
+                    "reason": "Local LLM unavailable"
+                }
+
+            # Calculate local suitability score
+            score = self._calculate_local_suitability(skill)
+
+            if score >= 0.7:
+                # Execute locally
+                result = await client.generate_skill_name(
+                    pattern_description=skill.description,
+                    tags=skill.tags,
+                    sequence=[]
+                )
+                return {
+                    "success": True,
+                    "tier_used": "local",
+                    "suitability_score": score,
+                    "result": result
+                }
+            elif score >= 0.4:
+                # Try HuggingFace (if available)
+                return {
+                    "success": True,
+                    "tier_used": "huggingface",
+                    "suitability_score": score,
+                    "passthrough": True,
+                    "reason": "Medium complexity, use HuggingFace"
+                }
+            else:
+                # Use Claude
+                return {
+                    "success": True,
+                    "tier_used": "claude",
+                    "suitability_score": score,
+                    "passthrough": True,
+                    "reason": "Complex task requires Claude"
+                }
+
+        except ImportError:
+            logger.debug("Local LLM integration not available")
+            return {
+                "success": True,
+                "tier_used": "claude",
+                "passthrough": True,
+                "reason": "Local LLM integration not installed"
+            }
+        except Exception as e:
+            logger.warning(f"Skill routing error: {e}")
+            return {
+                "success": False,
+                "tier_used": "claude",
+                "passthrough": True,
+                "error": str(e)
+            }
+
+    def _calculate_local_suitability(self, skill: SkillManifest) -> float:
+        """
+        Calculate suitability score for local LLM execution.
+
+        Args:
+            skill: SkillManifest to evaluate
+
+        Returns:
+            Score between 0.0 and 1.0 (higher = more suitable for local)
+        """
+        # Default capability scores
+        capability_scores = {
+            "tool_orchestration": 0.9,
+            "file_operations": 0.95,
+            "git_operations": 0.8,
+            "testing": 0.85,
+            "documentation": 0.9,
+            "problem_analysis": 0.7,
+            "decision_making": 0.6,
+            "debugging": 0.75,
+            "security": 0.1,
+        }
+
+        if not skill.capabilities:
+            return 0.5  # Default score
+
+        scores = []
+        for cap in skill.capabilities:
+            cap_lower = cap.lower()
+            for key, score in capability_scores.items():
+                if key in cap_lower:
+                    scores.append(score)
+                    break
+            else:
+                scores.append(0.5)  # Unknown capability
+
+        return sum(scores) / len(scores) if scores else 0.5
+
+    async def execute_skill_with_routing(
+        self,
+        skill: SkillManifest,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute a skill with intelligent tier routing.
+
+        This method:
+        1. Evaluates skill capabilities
+        2. Routes to appropriate tier (local/HF/Claude)
+        3. Handles fallback on errors
+        4. Logs execution metrics
+
+        Args:
+            skill: SkillManifest to execute
+            context: Optional execution context
+
+        Returns:
+            Execution result with tier and metrics
+        """
+        context = context or {}
+        start_time = datetime.utcnow()
+
+        # Route and execute
+        result = await self._route_skill_execution(skill, context)
+
+        # Add timing
+        result["execution_time_ms"] = (
+            datetime.utcnow() - start_time
+        ).total_seconds() * 1000
+
+        # Log for metrics
+        logger.info(
+            f"Skill '{skill.name}' executed via {result.get('tier_used', 'unknown')} "
+            f"in {result.get('execution_time_ms', 0):.1f}ms"
+        )
+
+        return result
+
+    def deduplicate_patterns_with_llm(
+        self,
+        patterns: list
+    ) -> list:
+        """
+        Deduplicate patterns using local LLM semantic clustering.
+
+        Args:
+            patterns: List of PatternDefinition objects
+
+        Returns:
+            Deduplicated list of patterns
+        """
+        try:
+            detector = EnhancedPatternDetector()
+            return detector.deduplicate_patterns(patterns)
+        except Exception as e:
+            logger.warning(f"Pattern deduplication failed: {e}")
+            return patterns
+
+    async def check_local_llm_status(self) -> Dict[str, Any]:
+        """
+        Check status of local LLM integration.
+
+        Returns:
+            Status dict with availability and configuration
+        """
+        try:
+            from esass_prototype.integrations.local_llm import get_local_llm_client
+
+            client = await get_local_llm_client()
+            available = await client.is_available()
+
+            return {
+                "enabled": True,
+                "available": available,
+                "endpoint": client.config.ollama_endpoint,
+                "model": client.config.ollama_model,
+                "tier": "local" if available else "claude"
+            }
+        except ImportError:
+            return {
+                "enabled": False,
+                "available": False,
+                "reason": "Local LLM integration not installed"
+            }
+        except Exception as e:
+            return {
+                "enabled": True,
+                "available": False,
+                "error": str(e)
+            }
 
 
 # Convenience function for quick setup

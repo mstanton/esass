@@ -124,6 +124,64 @@ class DonationSettings:
 
 
 @dataclass
+class LocalLLMConfig:
+    """Local LLM integration settings for cost-optimized skill execution."""
+    enabled: bool = True
+
+    # Ollama settings (Tier 1 - Free)
+    ollama_endpoint: str = "http://localhost:11434"
+    ollama_model: str = "functiongemma"
+    ollama_timeout_seconds: int = 30
+
+    # HuggingFace settings (Tier 2 - Cheap fallback)
+    hf_model: str = "mistralai/Mistral-7B-Instruct-v0.3"
+    hf_token: Optional[str] = None
+    hf_timeout_seconds: int = 60
+
+    # Routing settings
+    enable_pattern_analysis: bool = True
+    enable_skill_naming: bool = True
+    enable_semantic_clustering: bool = True
+    max_local_tokens: int = 2048
+    fallback_on_error: bool = True
+
+    # Task routing (capability -> local suitability score)
+    # Higher score = more suitable for local execution
+    capability_scores: dict = field(default_factory=lambda: {
+        "tool_orchestration": 0.9,
+        "file_operations": 0.95,
+        "git_operations": 0.8,
+        "testing": 0.85,
+        "documentation": 0.9,
+        "problem_analysis": 0.7,
+        "decision_making": 0.6,
+        "security": 0.1,  # Keep on Claude
+    })
+
+    @classmethod
+    def from_env(cls) -> "LocalLLMConfig":
+        """Load local LLM settings from environment variables."""
+        return cls(
+            enabled=os.environ.get("LOCAL_LLM_ENABLED", "true").lower() == "true",
+            ollama_endpoint=os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434"),
+            ollama_model=os.environ.get("OLLAMA_MODEL", "functiongemma"),
+            ollama_timeout_seconds=int(os.environ.get("OLLAMA_TIMEOUT", "30")),
+            hf_model=os.environ.get("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3"),
+            hf_token=os.environ.get("HF_TOKEN"),
+            hf_timeout_seconds=int(os.environ.get("HF_TIMEOUT", "60")),
+            enable_pattern_analysis=os.environ.get(
+                "LOCAL_LLM_PATTERN_ANALYSIS", "true"
+            ).lower() == "true",
+            enable_skill_naming=os.environ.get(
+                "LOCAL_LLM_SKILL_NAMING", "true"
+            ).lower() == "true",
+            enable_semantic_clustering=os.environ.get(
+                "LOCAL_LLM_SEMANTIC_CLUSTERING", "true"
+            ).lower() == "true",
+        )
+
+
+@dataclass
 class TracingSettings:
     """Tracing / analytics configuration."""
     enabled: bool = True
@@ -159,6 +217,7 @@ class IntegrationConfig:
     loop: LoopSettings = field(default_factory=LoopSettings)
     donation: DonationSettings = field(default_factory=DonationSettings)
     tracing: TracingSettings = field(default_factory=TracingSettings)
+    local_llm: LocalLLMConfig = field(default_factory=LocalLLMConfig)
 
     @classmethod
     def from_env(cls) -> "IntegrationConfig":
@@ -197,6 +256,7 @@ class IntegrationConfig:
             ),
             donation=DonationSettings.from_env(),
             tracing=TracingSettings.from_env(),
+            local_llm=LocalLLMConfig.from_env(),
         )
 
 

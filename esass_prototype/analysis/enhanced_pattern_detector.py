@@ -6,13 +6,22 @@ from nested event_data structures, enabling detection of meaningful patterns lik
 - Read(py) → Grep(search) → Edit(py) → Bash(test)
 - git_status → git_add → git_commit
 - file_exploration → code_modification → validation
+
+Enhanced with local LLM integration for:
+- Semantic pattern clustering
+- Improved pattern naming
+- Duplicate detection
 """
 
+import asyncio
+import logging
 from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from esass_prototype.models import LogEntry, PatternDefinition, PatternType
+
+logger = logging.getLogger(__name__)
 
 
 class SemanticTagExtractor:
@@ -642,6 +651,161 @@ class EnhancedPatternDetector:
 
         timestamps.sort()
         return timestamps[0], timestamps[-1]
+
+    def cluster_patterns_semantically(
+        self,
+        patterns: List[PatternDefinition],
+        use_llm: bool = True
+    ) -> Dict[str, List[PatternDefinition]]:
+        """
+        Cluster patterns by semantic similarity.
+
+        Uses local LLM for clustering when available, falls back to
+        tag-based clustering otherwise.
+
+        Args:
+            patterns: List of patterns to cluster
+            use_llm: Whether to try LLM-based clustering
+
+        Returns:
+            Dict mapping cluster name to list of patterns
+        """
+        if not patterns:
+            return {}
+
+        # Try LLM-based clustering
+        if use_llm:
+            clusters = self._cluster_with_llm(patterns)
+            if clusters:
+                return clusters
+
+        # Fallback to tag-based clustering
+        return self._cluster_by_tags(patterns)
+
+    def _cluster_with_llm(
+        self,
+        patterns: List[PatternDefinition]
+    ) -> Optional[Dict[str, List[PatternDefinition]]]:
+        """Cluster patterns using local LLM."""
+        try:
+            from esass_prototype.integrations.local_llm import get_local_llm_client
+
+            # Prepare pattern data for LLM
+            pattern_data = [
+                (p.description, p.sequence, p.tags)
+                for p in patterns
+            ]
+
+            # Run async clustering
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            async def _cluster():
+                client = await get_local_llm_client()
+                if not await client.is_available():
+                    return None
+                return await client.cluster_patterns_semantically(pattern_data)
+
+            cluster_indices = loop.run_until_complete(_cluster())
+
+            if cluster_indices is None:
+                return None
+
+            # Convert indices to pattern clusters
+            clusters: Dict[str, List[PatternDefinition]] = {}
+            for i, indices in enumerate(cluster_indices):
+                # Name cluster based on first pattern's category
+                if indices:
+                    first_pattern = patterns[indices[0]]
+                    # Infer cluster name from tags
+                    cluster_name = self._infer_cluster_name(first_pattern)
+                    clusters[cluster_name] = [patterns[idx] for idx in indices]
+
+            logger.debug(f"LLM clustering created {len(clusters)} clusters")
+            return clusters
+
+        except ImportError:
+            logger.debug("Local LLM not available for clustering")
+            return None
+        except Exception as e:
+            logger.debug(f"LLM clustering failed: {e}")
+            return None
+
+    def _cluster_by_tags(
+        self,
+        patterns: List[PatternDefinition]
+    ) -> Dict[str, List[PatternDefinition]]:
+        """Fallback clustering by shared tags."""
+        clusters: Dict[str, List[PatternDefinition]] = defaultdict(list)
+
+        for pattern in patterns:
+            # Determine primary category
+            category = self._infer_cluster_name(pattern)
+            clusters[category].append(pattern)
+
+        return dict(clusters)
+
+    def _infer_cluster_name(self, pattern: PatternDefinition) -> str:
+        """Infer cluster name from pattern tags and sequence."""
+        tags_lower = [t.lower() for t in pattern.tags]
+        seq_str = " ".join(pattern.sequence).lower()
+
+        if "git" in seq_str or any("git" in t for t in tags_lower):
+            return "git_workflow"
+        elif "test" in seq_str or "pytest" in seq_str:
+            return "testing"
+        elif "grep" in seq_str or "glob" in seq_str:
+            return "code_search"
+        elif "edit" in seq_str and "read" in seq_str:
+            return "file_modification"
+        elif "documentation" in seq_str or "readme" in seq_str:
+            return "documentation"
+        elif "config" in seq_str:
+            return "configuration"
+        else:
+            return "general"
+
+    def deduplicate_patterns(
+        self,
+        patterns: List[PatternDefinition],
+        similarity_threshold: float = 0.8
+    ) -> List[PatternDefinition]:
+        """
+        Remove duplicate/very similar patterns.
+
+        Uses semantic clustering to identify duplicates and keeps
+        the pattern with highest support from each cluster.
+
+        Args:
+            patterns: List of patterns to deduplicate
+            similarity_threshold: Minimum similarity to consider duplicate
+
+        Returns:
+            Deduplicated list of patterns
+        """
+        if len(patterns) <= 1:
+            return patterns
+
+        # Cluster patterns
+        clusters = self.cluster_patterns_semantically(patterns, use_llm=True)
+
+        deduplicated = []
+        for cluster_name, cluster_patterns in clusters.items():
+            if len(cluster_patterns) == 1:
+                deduplicated.append(cluster_patterns[0])
+            else:
+                # Keep pattern with highest support
+                best = max(cluster_patterns, key=lambda p: (p.support, p.confidence))
+                deduplicated.append(best)
+                logger.debug(
+                    f"Deduplicated {len(cluster_patterns)} patterns in '{cluster_name}' "
+                    f"cluster, keeping: {best.description[:50]}"
+                )
+
+        return deduplicated
 
     def _detect_workflow_patterns(
         self,
