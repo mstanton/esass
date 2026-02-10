@@ -127,6 +127,40 @@ async def list_tools() -> List[Tool]:
                 "properties": {},
             },
         ),
+        Tool(
+            name="get_cost_dashboard",
+            description="Get cost tracking dashboard with session stats, tier breakdown, and savings",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="get_full_analytics",
+            description="Get comprehensive analytics including costs, adaptive learning, and projections",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="get_adaptive_status",
+            description="Get adaptive routing status - tier overrides and learned patterns",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Optional: get stats for specific skill",
+                    },
+                    "capabilities": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: capabilities to check",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -163,6 +197,18 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
         elif name == "get_routing_stats":
             result = await _get_routing_stats()
+
+        elif name == "get_cost_dashboard":
+            result = await _get_cost_dashboard()
+
+        elif name == "get_full_analytics":
+            result = await _get_full_analytics()
+
+        elif name == "get_adaptive_status":
+            result = await _get_adaptive_status(
+                skill_name=arguments.get("skill_name"),
+                capabilities=arguments.get("capabilities", []),
+            )
 
         else:
             result = {"error": f"Unknown tool: {name}"}
@@ -202,7 +248,12 @@ async def _execute_skill(
         else:
             return {"passthrough": True, "tier": "claude"}
 
-    result = await router.execute_with_fallback(routing, executor)
+    # Execute with cost tracking and adaptive learning
+    result = await router.execute_with_fallback(
+        routing, executor,
+        skill_name=skill_name,
+        capabilities=capabilities,
+    )
 
     return {
         "success": result.success,
@@ -311,6 +362,41 @@ async def _get_routing_stats() -> Dict[str, Any]:
     """Get routing statistics."""
     router = await get_router()
     return router.get_stats()
+
+
+async def _get_cost_dashboard() -> Dict[str, Any]:
+    """Get cost tracking dashboard."""
+    router = await get_router()
+    return await router.get_cost_dashboard()
+
+
+async def _get_full_analytics() -> Dict[str, Any]:
+    """Get comprehensive analytics."""
+    router = await get_router()
+    return await router.get_full_stats()
+
+
+async def _get_adaptive_status(
+    skill_name: str | None = None,
+    capabilities: List[str] | None = None,
+) -> Dict[str, Any]:
+    """Get adaptive routing status."""
+    from adaptive_router import get_adaptive_router
+
+    adaptive_router = get_adaptive_router()
+
+    result = {
+        "active_overrides": adaptive_router.get_all_overrides(),
+        "capability_learning": adaptive_router.get_capability_learning(),
+    }
+
+    # Add skill-specific stats if requested
+    if skill_name and capabilities:
+        result["skill_stats"] = adaptive_router.get_pattern_stats(
+            skill_name, capabilities
+        )
+
+    return result
 
 
 async def main():

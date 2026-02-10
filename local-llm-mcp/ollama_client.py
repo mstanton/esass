@@ -181,9 +181,30 @@ Determine the appropriate actions and respond with a JSON execution plan."""
 
         response = await self.generate(prompt, system=system_prompt)
 
-        # Parse the response as JSON
+        # Parse the response as JSON (handle markdown code blocks)
+        content = response.content.strip()
+
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            start = content.find("```json") + 7
+            end = content.find("```", start)
+            if end > start:
+                content = content[start:end].strip()
+        elif "```" in content:
+            start = content.find("```") + 3
+            end = content.find("```", start)
+            if end > start:
+                content = content[start:end].strip()
+
+        # Also try to find JSON object directly
+        if not content.startswith("{"):
+            json_start = content.find("{")
+            json_end = content.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                content = content[json_start:json_end]
+
         try:
-            result = json.loads(response.content)
+            result = json.loads(content)
         except json.JSONDecodeError:
             result = {
                 "actions": [],
@@ -268,8 +289,30 @@ Provide analysis in JSON format:
 
         response = await self.generate(prompt)
 
+        # Parse the response as JSON (handle markdown code blocks)
+        content = response.content.strip()
+
+        # Extract JSON from markdown code blocks if present
+        if "```json" in content:
+            start = content.find("```json") + 7
+            end = content.find("```", start)
+            if end > start:
+                content = content[start:end].strip()
+        elif "```" in content:
+            start = content.find("```") + 3
+            end = content.find("```", start)
+            if end > start:
+                content = content[start:end].strip()
+
+        # Also try to find JSON object directly
+        if not content.startswith("{"):
+            json_start = content.find("{")
+            json_end = content.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                content = content[json_start:json_end]
+
         try:
-            analysis = json.loads(response.content)
+            analysis = json.loads(content)
         except json.JSONDecodeError:
             analysis = {
                 "category": "unknown",

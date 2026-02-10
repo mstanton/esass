@@ -27,6 +27,7 @@ class RoutingDecision(Enum):
     TOKEN_LIMIT = "token_limit"        # Exceeded local token limit
     AVAILABILITY = "availability"      # Tier unavailable, using fallback
     ERROR_FALLBACK = "error_fallback"  # Previous tier failed
+    ADAPTIVE_LEARNING = "adaptive"    # Learned from execution history
 
 
 @dataclass
@@ -200,12 +201,35 @@ class TierRouter:
         """Determine the best tier for executing a skill.
 
         Considers:
-        1. Skill capabilities
-        2. Token estimate
-        3. Tier availability
+        1. Adaptive learning from execution history (first priority)
+        2. Skill capabilities
+        3. Token estimate
+        4. Tier availability
         """
-        # First, route by capability
+        # First, route by capability (baseline)
         cap_route = self.route_by_capability(capabilities)
+
+        # Check adaptive routing - learned from execution history
+        adaptive_router = await self._get_adaptive_router()
+        adaptive_tier, adaptive_reason = adaptive_router.get_tier_recommendation(
+            skill_name, capabilities, cap_route.tier
+        )
+
+        if adaptive_tier != cap_route.tier and adaptive_reason:
+            # Adaptive learning overrides baseline routing
+            if adaptive_tier == Tier.LOCAL:
+                fallback_chain = [Tier.HUGGINGFACE, Tier.CLAUDE]
+            elif adaptive_tier == Tier.HUGGINGFACE:
+                fallback_chain = [Tier.LOCAL, Tier.CLAUDE]
+            else:
+                fallback_chain = []
+
+            cap_route = RoutingResult(
+                tier=adaptive_tier,
+                reason=RoutingDecision.ADAPTIVE_LEARNING,
+                details=f"Adaptive: {adaptive_reason}",
+                fallback_chain=fallback_chain,
+            )
 
         # Check token limit
         if estimated_tokens > self.config.max_local_tokens and cap_route.tier == Tier.LOCAL:
@@ -243,12 +267,16 @@ class TierRouter:
         self,
         routing: RoutingResult,
         executor: Callable[[Tier], Awaitable[Dict[str, Any]]],
+        skill_name: str = "unknown",
+        capabilities: Optional[List[str]] = None,
     ) -> ExecutionResult:
         """Execute on the routed tier with automatic fallback on failure.
 
         Args:
             routing: The routing decision
             executor: Async function that takes a Tier and returns execution result
+            skill_name: Name of skill being executed (for tracking)
+            capabilities: Skill capabilities (for adaptive learning)
 
         Returns:
             ExecutionResult with the final outcome
@@ -256,6 +284,10 @@ class TierRouter:
         tiers_to_try = [routing.tier] + routing.fallback_chain
         last_error = None
         fallback_used = False
+        capabilities = capabilities or []
+
+        cost_tracker = await self._get_cost_tracker()
+        adaptive_router = await self._get_adaptive_router()
 
         for i, tier in enumerate(tiers_to_try):
             if tier == Tier.CLAUDE:
@@ -272,23 +304,73 @@ class TierRouter:
                     fallback_used = True
                     continue
 
+                # Track execution time
+                start_time = time.time()
                 result = await executor(tier)
+                latency_ms = (time.time() - start_time) * 1000
 
-                if result.get("success", True):
+                tokens_used = result.get("tokens", 500)  # Estimate if not provided
+                success = result.get("success", True)
+
+                if success:
                     # Reset failure count on success
                     self._failure_counts[tier] = 0
+
+                    # Log cost
+                    cost_tracker.log_execution(
+                        skill_name=skill_name,
+                        tier_requested=routing.tier,
+                        tier_used=tier,
+                        fallback_used=fallback_used,
+                        success=True,
+                        tokens_used=tokens_used,
+                        latency_ms=latency_ms,
+                        routing_reason=routing.reason.value,
+                    )
+
+                    # Record for adaptive learning
+                    adaptive_router.record_execution(
+                        skill_name=skill_name,
+                        capabilities=capabilities,
+                        tier_used=tier,
+                        success=True,
+                        latency_ms=latency_ms,
+                    )
 
                     return ExecutionResult(
                         success=True,
                         tier_used=tier,
                         content=result,
-                        tokens_used=result.get("tokens"),
+                        tokens_used=tokens_used,
                         fallback_used=fallback_used,
                     )
                 else:
                     # Execution returned failure
                     self._failure_counts[tier] += 1
                     last_error = result.get("error", "Execution failed")
+
+                    # Log failed attempt
+                    cost_tracker.log_execution(
+                        skill_name=skill_name,
+                        tier_requested=routing.tier,
+                        tier_used=tier,
+                        fallback_used=fallback_used,
+                        success=False,
+                        tokens_used=tokens_used,
+                        latency_ms=latency_ms,
+                        error=last_error,
+                        routing_reason=routing.reason.value,
+                    )
+
+                    # Record for adaptive learning
+                    adaptive_router.record_execution(
+                        skill_name=skill_name,
+                        capabilities=capabilities,
+                        tier_used=tier,
+                        success=False,
+                        latency_ms=latency_ms,
+                    )
+
                     fallback_used = True
 
             except Exception as e:
@@ -296,6 +378,15 @@ class TierRouter:
                 last_error = str(e)
                 fallback_used = True
                 logger.warning(f"Tier {tier.value} failed: {e}")
+
+                # Record exception for adaptive learning
+                adaptive_router.record_execution(
+                    skill_name=skill_name,
+                    capabilities=capabilities,
+                    tier_used=tier,
+                    success=False,
+                    latency_ms=0,
+                )
 
         # All tiers failed
         return ExecutionResult(
@@ -307,11 +398,48 @@ class TierRouter:
         )
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get routing statistics."""
+        """Get basic routing statistics (synchronous)."""
         return {
             "availability": {t.value: v for t, v in self._tier_available.items()},
             "failure_counts": {t.value: v for t, v in self._failure_counts.items()},
         }
+
+    async def get_full_stats(self) -> Dict[str, Any]:
+        """Get comprehensive statistics including costs and adaptive learning."""
+        cost_tracker = await self._get_cost_tracker()
+        adaptive_router = await self._get_adaptive_router()
+
+        return {
+            "routing": self.get_stats(),
+            "costs": {
+                "session": cost_tracker.get_session_summary(),
+                "tier_summary": cost_tracker.get_tier_summary(),
+                "projection": cost_tracker.get_cost_projection(),
+            },
+            "adaptive_learning": {
+                "active_overrides": adaptive_router.get_all_overrides(),
+                "capability_learning": adaptive_router.get_capability_learning(),
+            },
+        }
+
+    async def get_cost_dashboard(self) -> Dict[str, Any]:
+        """Get cost tracking dashboard data."""
+        cost_tracker = await self._get_cost_tracker()
+
+        return {
+            "session_summary": cost_tracker.get_session_summary(),
+            "tier_summary": cost_tracker.get_tier_summary(),
+            "today": cost_tracker.get_daily_report().to_dict(),
+            "weekly": [r.to_dict() for r in cost_tracker.get_weekly_report()],
+            "projection": cost_tracker.get_cost_projection(),
+        }
+
+    async def flush_tracking(self) -> None:
+        """Force save all tracking data to disk."""
+        cost_tracker = await self._get_cost_tracker()
+        adaptive_router = await self._get_adaptive_router()
+        cost_tracker.flush()
+        adaptive_router.flush()
 
 
 # Singleton instance
