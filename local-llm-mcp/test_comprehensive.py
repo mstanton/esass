@@ -6,6 +6,7 @@ import json
 import sys
 import os
 import time
+import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -16,6 +17,7 @@ from cost_tracker import CostTracker
 from adaptive_router import AdaptiveRouter
 
 
+@pytest.mark.asyncio
 async def test_multiple_skill_executions():
     """Test multiple skill executions with cost tracking."""
     print("\n" + "=" * 70)
@@ -88,6 +90,7 @@ async def test_multiple_skill_executions():
     return cost_tracker, router._adaptive_router
 
 
+@pytest.mark.asyncio
 async def test_adaptive_learning_simulation():
     """Test adaptive learning by simulating failures."""
     print("\n" + "=" * 70)
@@ -139,6 +142,7 @@ async def test_adaptive_learning_simulation():
     return adaptive
 
 
+@pytest.mark.asyncio
 async def test_cost_projections():
     """Test cost projection calculations."""
     print("\n" + "=" * 70)
@@ -210,6 +214,7 @@ async def test_cost_projections():
     return tracker
 
 
+@pytest.mark.asyncio
 async def test_real_ollama_execution():
     """Test real Ollama execution with different task types."""
     print("\n" + "=" * 70)
@@ -276,6 +281,7 @@ async def test_real_ollama_execution():
     return client
 
 
+@pytest.mark.asyncio
 async def test_full_dashboard():
     """Test the full analytics dashboard."""
     print("\n" + "=" * 70)

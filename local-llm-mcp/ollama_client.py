@@ -1,13 +1,33 @@
-"""Ollama client for FunctionGemma model interactions."""
+"""Ollama client for local LLM interactions.
 
+Enhanced with:
+- Connection pooling with limits
+- Circuit breaker for failure protection
+- Retry logic with exponential backoff
+- Response caching for repeated queries
+- Model warmup/keep-alive
+"""
+
+import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from config import get_config
+from utils import (
+    extract_json,
+    clean_skill_name,
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    ResponseCache,
+    RetryConfig,
+    RetryStrategy,
+    retry_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,29 +41,80 @@ class OllamaResponse:
     tool_calls: List[Dict[str, Any]] | None = None
     total_duration: int | None = None
     eval_count: int | None = None
+    load_duration: int | None = None
+    prompt_eval_count: int | None = None
 
 
 class OllamaClient:
-    """Client for interacting with Ollama API running FunctionGemma."""
+    """Client for interacting with Ollama API.
+
+    Features:
+    - Connection pooling with configurable limits
+    - Circuit breaker to prevent cascading failures
+    - Retry with exponential backoff
+    - Response caching for identical requests
+    - Model keep-alive to reduce cold starts
+    """
 
     def __init__(
         self,
         endpoint: str | None = None,
         model: str | None = None,
         timeout: int | None = None,
+        max_connections: int = 10,
+        enable_cache: bool = True,
+        cache_ttl: float = 300.0,
     ):
         config = get_config()
         self.endpoint = endpoint or config.ollama_endpoint
         self.model = model or config.ollama_model
         self.timeout = timeout or config.ollama_timeout_seconds
+        self.max_connections = max_connections
+
         self._client: httpx.AsyncClient | None = None
+        self._last_health_check: float = 0
+        self._health_check_interval = 30.0  # seconds
+        self._is_healthy: bool | None = None
+
+        # Circuit breaker for failure protection
+        self._circuit = CircuitBreaker(
+            "ollama",
+            CircuitBreakerConfig(
+                failure_threshold=3,
+                success_threshold=2,
+                timeout_seconds=30.0,
+            )
+        )
+
+        # Response cache
+        self._cache: ResponseCache | None = None
+        if enable_cache:
+            self._cache = ResponseCache(
+                max_size=50,
+                default_ttl_seconds=cache_ttl,
+            )
+
+        # Retry configuration
+        self._retry_config = RetryConfig(
+            max_attempts=3,
+            base_delay_seconds=1.0,
+            max_delay_seconds=10.0,
+            strategy=RetryStrategy.EXPONENTIAL,
+            retryable_exceptions=(httpx.TimeoutException, httpx.ConnectError),
+        )
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create the HTTP client."""
+        """Get or create the HTTP client with connection pooling."""
         if self._client is None:
+            limits = httpx.Limits(
+                max_connections=self.max_connections,
+                max_keepalive_connections=5,
+                keepalive_expiry=30.0,
+            )
             self._client = httpx.AsyncClient(
                 base_url=self.endpoint,
-                timeout=httpx.Timeout(self.timeout),
+                timeout=httpx.Timeout(self.timeout, connect=10.0),
+                limits=limits,
             )
         return self._client
 
@@ -54,19 +125,84 @@ class OllamaClient:
             self._client = None
 
     async def is_available(self) -> bool:
-        """Check if Ollama is available and the model is loaded."""
+        """Check if Ollama is available and the model is loaded.
+
+        Uses cached health status for frequent checks.
+        """
+        now = time.time()
+
+        # Return cached status if recent
+        if (
+            self._is_healthy is not None
+            and now - self._last_health_check < self._health_check_interval
+        ):
+            return self._is_healthy
+
         try:
             client = await self._get_client()
-            response = await client.get("/api/tags")
+            response = await client.get("/api/tags", timeout=5.0)
+
             if response.status_code == 200:
                 data = response.json()
                 models = [m.get("name", "") for m in data.get("models", [])]
-                # Check if our model is available (with or without :latest tag)
                 model_base = self.model.split(":")[0]
-                return any(model_base in m for m in models)
-            return False
+                self._is_healthy = any(model_base in m for m in models)
+            else:
+                self._is_healthy = False
+
         except Exception as e:
             logger.debug(f"Ollama availability check failed: {e}")
+            self._is_healthy = False
+
+        self._last_health_check = now
+        return self._is_healthy
+
+    async def warmup(self) -> bool:
+        """Warm up the model to reduce first-request latency.
+
+        Sends a minimal request to load the model into memory.
+        """
+        try:
+            client = await self._get_client()
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": False,
+                "options": {"num_predict": 1},  # Minimal generation
+            }
+
+            response = await client.post("/api/chat", json=payload, timeout=30.0)
+            success = response.status_code == 200
+
+            if success:
+                logger.info(f"Model {self.model} warmed up successfully")
+            return success
+
+        except Exception as e:
+            logger.warning(f"Model warmup failed: {e}")
+            return False
+
+    async def keep_alive(self, duration_minutes: int = 5) -> bool:
+        """Keep model loaded in memory.
+
+        Args:
+            duration_minutes: How long to keep model loaded
+
+        Returns:
+            True if successful
+        """
+        try:
+            client = await self._get_client()
+            payload = {
+                "model": self.model,
+                "keep_alive": f"{duration_minutes}m",
+            }
+
+            response = await client.post("/api/generate", json=payload)
+            return response.status_code == 200
+
+        except Exception as e:
+            logger.debug(f"Keep-alive failed: {e}")
             return False
 
     async def generate(
@@ -74,7 +210,9 @@ class OllamaClient:
         prompt: str,
         system: str | None = None,
         tools: List[Dict[str, Any]] | None = None,
-        stream: bool = False,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        use_cache: bool = True,
     ) -> OllamaResponse:
         """Generate a response from the model.
 
@@ -82,66 +220,107 @@ class OllamaClient:
             prompt: The user prompt
             system: Optional system message
             tools: Optional list of tool definitions for function calling
-            stream: Whether to stream the response (not implemented yet)
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            use_cache: Whether to use response cache
 
         Returns:
             OllamaResponse with the generated content
+
+        Raises:
+            RuntimeError: If circuit is open
+            httpx.HTTPError: On request failure after retries
         """
-        client = await self._get_client()
+        # Check circuit breaker
+        if not self._circuit.can_execute():
+            raise RuntimeError(
+                f"Circuit breaker open for Ollama - service appears unavailable"
+            )
 
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        # Check cache
+        if use_cache and self._cache:
+            cache_key = self._cache.make_key(
+                "generate", prompt=prompt, system=system, model=self.model
+            )
+            if cached := self._cache.get(cache_key):
+                logger.debug("Cache hit for generate request")
+                return cached
 
-        payload: Dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,  # Non-streaming for simplicity
-        }
+        async def _do_generate() -> OllamaResponse:
+            client = await self._get_client()
 
-        # Add tools if provided (for function calling)
-        if tools:
-            payload["tools"] = tools
+            messages = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
 
-        logger.debug(f"Ollama request: {json.dumps(payload, indent=2)[:500]}")
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                },
+            }
 
-        response = await client.post("/api/chat", json=payload)
-        response.raise_for_status()
+            if max_tokens:
+                payload["options"]["num_predict"] = max_tokens
 
-        data = response.json()
-        message = data.get("message", {})
+            if tools:
+                payload["tools"] = tools
 
-        return OllamaResponse(
-            content=message.get("content", ""),
-            model=data.get("model", self.model),
-            done=data.get("done", True),
-            tool_calls=message.get("tool_calls"),
-            total_duration=data.get("total_duration"),
-            eval_count=data.get("eval_count"),
-        )
+            logger.debug(f"Ollama request: {len(prompt)} chars, temp={temperature}")
+
+            response = await client.post("/api/chat", json=payload)
+            response.raise_for_status()
+
+            data = response.json()
+            message = data.get("message", {})
+
+            return OllamaResponse(
+                content=message.get("content", ""),
+                model=data.get("model", self.model),
+                done=data.get("done", True),
+                tool_calls=message.get("tool_calls"),
+                total_duration=data.get("total_duration"),
+                eval_count=data.get("eval_count"),
+                load_duration=data.get("load_duration"),
+                prompt_eval_count=data.get("prompt_eval_count"),
+            )
+
+        try:
+            result = await retry_async(_do_generate, self._retry_config)
+            self._circuit.record_success()
+
+            # Cache successful result
+            if use_cache and self._cache:
+                self._cache.set(cache_key, result)
+
+            return result
+
+        except Exception as e:
+            self._circuit.record_failure()
+            raise
 
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text (for semantic clustering).
 
-        Note: FunctionGemma may not have embedding endpoint.
-        Falls back to using nomic-embed-text if available.
+        Falls back to nomic-embed-text if available.
         """
-        client = await self._get_client()
-
-        payload = {
-            "model": "nomic-embed-text",  # Common embedding model
-            "prompt": text,
-        }
-
         try:
+            client = await self._get_client()
+            payload = {
+                "model": "nomic-embed-text",
+                "prompt": text,
+            }
+
             response = await client.post("/api/embeddings", json=payload)
             response.raise_for_status()
             data = response.json()
             return data.get("embedding", [])
+
         except Exception as e:
             logger.warning(f"Embedding generation failed: {e}")
-            # Return empty embedding on failure
             return []
 
     async def execute_skill(
@@ -158,12 +337,16 @@ class OllamaClient:
             context: Execution context (files, parameters, etc.)
 
         Returns:
-            Dict with execution result
+            Dict with execution result including:
+            - actions: List of tool actions to take
+            - reasoning: Explanation of approach
+            - success: Whether execution planning succeeded
+            - tokens: Token count (if available)
         """
         system_prompt = """You are a skill executor. Given a skill description and context,
-determine what actions to take and return a structured response.
+determine what actions to take and return a structured JSON response.
 
-Respond in JSON format with:
+Respond in JSON format:
 {
     "actions": [{"tool": "...", "params": {...}}],
     "reasoning": "...",
@@ -179,44 +362,33 @@ Context:
 
 Determine the appropriate actions and respond with a JSON execution plan."""
 
-        response = await self.generate(prompt, system=system_prompt)
-
-        # Parse the response as JSON (handle markdown code blocks)
-        content = response.content.strip()
-
-        # Extract JSON from markdown code blocks if present
-        if "```json" in content:
-            start = content.find("```json") + 7
-            end = content.find("```", start)
-            if end > start:
-                content = content[start:end].strip()
-        elif "```" in content:
-            start = content.find("```") + 3
-            end = content.find("```", start)
-            if end > start:
-                content = content[start:end].strip()
-
-        # Also try to find JSON object directly
-        if not content.startswith("{"):
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                content = content[json_start:json_end]
-
         try:
-            result = json.loads(content)
-        except json.JSONDecodeError:
-            result = {
+            response = await self.generate(
+                prompt,
+                system=system_prompt,
+                temperature=0.3,  # Lower temperature for more consistent JSON
+                use_cache=False,  # Don't cache skill executions
+            )
+
+            result = extract_json(response.content)
+
+            # Ensure required fields
+            if "success" not in result:
+                result["success"] = "error" not in result
+
+            result["model"] = response.model
+            result["tokens"] = response.eval_count
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Skill execution failed: {e}")
+            return {
                 "actions": [],
-                "reasoning": response.content,
+                "reasoning": str(e),
                 "success": False,
-                "error": "Failed to parse response as JSON",
+                "error": str(e),
             }
-
-        result["model"] = response.model
-        result["tokens"] = response.eval_count
-
-        return result
 
     async def generate_skill_name(
         self,
@@ -235,7 +407,7 @@ Determine the appropriate actions and respond with a JSON execution plan."""
         prompt = f"""Generate a concise, semantic skill name for this pattern:
 
 Pattern: {pattern_sequence}
-Tags: {', '.join(tags)}
+Tags: {', '.join(tags) if tags else 'none'}
 
 Requirements:
 - Use snake_case
@@ -245,17 +417,18 @@ Requirements:
 
 Respond with ONLY the skill name, nothing else."""
 
-        response = await self.generate(prompt)
-        name = response.content.strip().lower()
+        try:
+            response = await self.generate(
+                prompt,
+                temperature=0.3,
+                max_tokens=20,
+            )
+            return clean_skill_name(response.content)
 
-        # Ensure it ends with _skill
-        if not name.endswith("_skill"):
-            name = f"{name}_skill"
-
-        # Clean up any invalid characters
-        name = "".join(c if c.isalnum() or c == "_" else "_" for c in name)
-
-        return name
+        except Exception as e:
+            logger.warning(f"Skill name generation failed: {e}")
+            fallback = f"pattern_{hash(pattern_sequence) % 10000:04x}_skill"
+            return fallback
 
     async def analyze_pattern(
         self,
@@ -287,41 +460,37 @@ Provide analysis in JSON format:
     "is_meaningful": true/false
 }}"""
 
-        response = await self.generate(prompt)
-
-        # Parse the response as JSON (handle markdown code blocks)
-        content = response.content.strip()
-
-        # Extract JSON from markdown code blocks if present
-        if "```json" in content:
-            start = content.find("```json") + 7
-            end = content.find("```", start)
-            if end > start:
-                content = content[start:end].strip()
-        elif "```" in content:
-            start = content.find("```") + 3
-            end = content.find("```", start)
-            if end > start:
-                content = content[start:end].strip()
-
-        # Also try to find JSON object directly
-        if not content.startswith("{"):
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                content = content[json_start:json_end]
-
         try:
-            analysis = json.loads(content)
-        except json.JSONDecodeError:
-            analysis = {
+            response = await self.generate(prompt, temperature=0.3)
+            analysis = extract_json(response.content)
+
+            # Ensure required fields
+            if "category" not in analysis:
+                analysis["category"] = "unknown"
+            if "is_meaningful" not in analysis:
+                analysis["is_meaningful"] = False
+
+            return analysis
+
+        except Exception as e:
+            logger.warning(f"Pattern analysis failed: {e}")
+            return {
                 "category": "unknown",
-                "description": response.content,
+                "description": str(e),
                 "suggested_name": f"pattern_{hash(pattern_sequence) % 10000:04x}_skill",
                 "is_meaningful": False,
+                "error": str(e),
             }
 
-        return analysis
+    def get_circuit_status(self) -> Dict[str, Any]:
+        """Get circuit breaker status."""
+        return self._circuit.get_status()
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        if self._cache:
+            return self._cache.get_stats()
+        return {"enabled": False}
 
 
 # Singleton instance
@@ -334,3 +503,9 @@ async def get_ollama_client() -> OllamaClient:
     if _client is None:
         _client = OllamaClient()
     return _client
+
+
+def reset_ollama_client() -> None:
+    """Reset the global client (for testing)."""
+    global _client
+    _client = None

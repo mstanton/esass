@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """MCP Server for local LLM skill execution with 3-tier fallback.
 
-This server provides tools for:
-- Executing ESASS skills via local LLM (FunctionGemma)
-- Semantic pattern analysis
-- Skill name generation
+Enhanced with:
+- Input validation
+- Rate limiting
+- Circuit breaker status exposure
+- Health monitoring
+- Model warmup on startup
 
 Tier hierarchy:
-1. Local (Ollama/FunctionGemma) - Primary, free
+1. Local (Ollama/gemma3:4b) - Primary, free
 2. HuggingFace Inference API - Fallback, cheap
 3. Claude - Passthrough for complex tasks
 """
@@ -26,6 +28,7 @@ from config import Tier, get_config, set_config, LocalLLMConfig
 from tier_router import TierRouter, get_router, RoutingResult, ExecutionResult
 from ollama_client import get_ollama_client
 from huggingface_client import get_huggingface_client
+from utils import validate_skill_request, RateLimiter
 
 # Configure logging
 logging.basicConfig(
@@ -37,6 +40,9 @@ logger = logging.getLogger("local-llm-mcp")
 
 # Create MCP server
 server = Server("local-llm-mcp")
+
+# Rate limiter: 30 requests/minute, burst of 10
+_rate_limiter = RateLimiter(rate=0.5, capacity=10)
 
 
 @server.list_tools()
@@ -166,9 +172,20 @@ async def list_tools() -> List[Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
-    """Handle tool calls."""
+    """Handle tool calls with rate limiting and validation."""
     logger.info(f"Tool call: {name}")
     logger.debug(f"Arguments: {json.dumps(arguments, indent=2)}")
+
+    # Rate limiting (skip for status queries)
+    if name not in ("check_availability", "get_routing_stats", "get_adaptive_status"):
+        if not _rate_limiter.acquire():
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "error": "Rate limit exceeded. Please wait before making more requests.",
+                    "rate_limit": _rate_limiter.get_status(),
+                })
+            )]
 
     try:
         if name == "execute_skill":
@@ -217,7 +234,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({"error": str(e)}))]
+        return [TextContent(type="text", text=json.dumps({
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }))]
 
 
 async def _execute_skill(
@@ -227,6 +247,23 @@ async def _execute_skill(
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Execute a skill using the appropriate tier."""
+    # Validate input
+    validation = validate_skill_request(
+        skill_name, skill_description, capabilities, context
+    )
+    if not validation.valid:
+        return {
+            "success": False,
+            "error": "Validation failed",
+            "validation_errors": validation.errors,
+        }
+
+    # Use sanitized values
+    skill_name = validation.sanitized["skill_name"]
+    skill_description = validation.sanitized["skill_description"]
+    capabilities = validation.sanitized["capabilities"]
+    context = validation.sanitized["context"]
+
     router = await get_router()
 
     # Estimate tokens (rough: 4 chars per token)
@@ -273,6 +310,10 @@ async def _analyze_pattern(
     confidence: float,
 ) -> Dict[str, Any]:
     """Analyze a pattern for semantic meaning."""
+    # Basic validation
+    if not pattern_sequence or len(pattern_sequence) > 5000:
+        return {"error": "Invalid pattern_sequence"}
+
     router = await get_router()
 
     # Pattern analysis is a local-first task
@@ -303,6 +344,10 @@ async def _generate_skill_name(
     tags: List[str],
 ) -> Dict[str, Any]:
     """Generate a semantic skill name."""
+    # Basic validation
+    if not pattern_sequence or len(pattern_sequence) > 5000:
+        return {"error": "Invalid pattern_sequence"}
+
     router = await get_router()
 
     # Skill naming is a local-first task
@@ -322,7 +367,7 @@ async def _generate_skill_name(
 
     result = await router.execute_with_fallback(routing, executor)
 
-    if result.success and "name" in result.content:
+    if result.success and isinstance(result.content, dict) and "name" in result.content:
         return {
             "success": True,
             "skill_name": result.content["name"],
@@ -340,15 +385,41 @@ async def _generate_skill_name(
 
 
 async def _check_availability() -> Dict[str, Any]:
-    """Check tier availability."""
+    """Check tier availability with circuit breaker status."""
     router = await get_router()
 
     availability = {}
+    circuit_status = {}
+
     for tier in [Tier.LOCAL, Tier.HUGGINGFACE, Tier.CLAUDE]:
         availability[tier.value] = await router.check_tier_availability(tier)
 
+    # Get circuit breaker status
+    try:
+        ollama = await get_ollama_client()
+        circuit_status["ollama"] = ollama.get_circuit_status()
+    except Exception:
+        circuit_status["ollama"] = {"state": "unknown"}
+
+    try:
+        hf = await get_huggingface_client()
+        circuit_status["huggingface"] = hf.get_circuit_status()
+    except Exception:
+        circuit_status["huggingface"] = {"state": "unknown"}
+
+    # Get cache stats
+    cache_stats = {}
+    try:
+        ollama = await get_ollama_client()
+        cache_stats["ollama"] = ollama.get_cache_stats()
+    except Exception:
+        cache_stats["ollama"] = {"enabled": False}
+
     return {
         "availability": availability,
+        "circuit_breakers": circuit_status,
+        "cache": cache_stats,
+        "rate_limit": _rate_limiter.get_status(),
         "config": {
             "ollama_endpoint": get_config().ollama_endpoint,
             "ollama_model": get_config().ollama_model,
@@ -373,7 +444,12 @@ async def _get_cost_dashboard() -> Dict[str, Any]:
 async def _get_full_analytics() -> Dict[str, Any]:
     """Get comprehensive analytics."""
     router = await get_router()
-    return await router.get_full_stats()
+    stats = await router.get_full_stats()
+
+    # Add health status
+    stats["health"] = await _check_availability()
+
+    return stats
 
 
 async def _get_adaptive_status(
@@ -399,6 +475,19 @@ async def _get_adaptive_status(
     return result
 
 
+async def warmup_models() -> None:
+    """Warm up models on startup to reduce first-request latency."""
+    logger.info("Warming up models...")
+
+    try:
+        ollama = await get_ollama_client()
+        if await ollama.is_available():
+            await ollama.warmup()
+            await ollama.keep_alive(5)  # Keep loaded for 5 minutes
+    except Exception as e:
+        logger.warning(f"Ollama warmup failed: {e}")
+
+
 async def main():
     """Run the MCP server."""
     logger.info("Starting local-llm-mcp server...")
@@ -409,6 +498,9 @@ async def main():
     for tier in [Tier.LOCAL, Tier.HUGGINGFACE]:
         available = await router.check_tier_availability(tier)
         logger.info(f"Tier {tier.value}: {'available' if available else 'unavailable'}")
+
+    # Warm up models in background
+    asyncio.create_task(warmup_models())
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

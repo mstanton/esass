@@ -132,17 +132,20 @@ class CostTracker:
     - Daily cost reports
     - Savings calculation (local vs Claude)
     - Persistence to JSON file
+    - Memory-bounded execution log (configurable max size)
     """
 
     def __init__(
         self,
         data_dir: str = "./data/cost_tracking",
         auto_save_interval: int = 10,  # Save every N executions
+        max_memory_logs: int = 1000,   # Max logs to keep in memory
     ):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         self.auto_save_interval = auto_save_interval
+        self.max_memory_logs = max_memory_logs
         self._executions_since_save = 0
 
         # Current session stats
@@ -271,8 +274,13 @@ class CostTracker:
             routing_reason=routing_reason,
         )
 
-        # Store in memory
+        # Store in memory (with bounded size)
         self.execution_logs.append(log)
+
+        # Trim if exceeding max memory logs
+        if len(self.execution_logs) > self.max_memory_logs:
+            # Keep most recent logs
+            self.execution_logs = self.execution_logs[-self.max_memory_logs:]
 
         # Update tier stats
         stats = self.tier_stats[tier_used]
