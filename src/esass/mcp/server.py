@@ -17,6 +17,7 @@ Tier hierarchy:
 import asyncio
 import json
 import logging
+import time
 import sys
 from typing import Any, Dict, List
 
@@ -29,6 +30,8 @@ from esass.mcp.tier_router import TierRouter, get_router, RoutingResult, Executi
 from esass.mcp.ollama_client import get_ollama_client
 from esass.mcp.huggingface_client import get_huggingface_client
 from esass.mcp.utils import validate_skill_request, RateLimiter
+from esass.mcp.event_logger import get_event_logger
+from esass.mcp.status_writer import MCPStatusWriter
 
 # Configure logging
 logging.basicConfig(
@@ -286,11 +289,39 @@ async def _execute_skill(
             return {"passthrough": True, "tier": "claude"}
 
     # Execute with cost tracking and adaptive learning
+    start_time = time.time()
     result = await router.execute_with_fallback(
         routing, executor,
         skill_name=skill_name,
         capabilities=capabilities,
     )
+    latency_ms = (time.time() - start_time) * 1000
+
+    # Log execution event for dashboard
+    try:
+        tokens = result.tokens_used or 0
+        from esass.mcp.cost_tracker import COST_PER_1K_TOKENS
+        cost_actual = (tokens / 1000) * COST_PER_1K_TOKENS.get(result.tier_used, 0.015)
+        cost_if_claude = (tokens / 1000) * COST_PER_1K_TOKENS[Tier.CLAUDE]
+        savings = cost_if_claude - cost_actual
+
+        event_logger = get_event_logger()
+        event_logger.log_execution(
+            skill_name=skill_name,
+            tier_requested=routing.tier.value,
+            tier_used=result.tier_used.value,
+            fallback_used=result.fallback_used,
+            success=result.success,
+            tokens_used=tokens,
+            latency_ms=latency_ms,
+            cost_actual=cost_actual,
+            cost_if_claude=cost_if_claude,
+            savings=savings,
+            routing_reason=routing.reason.value,
+            error=result.error,
+        )
+    except Exception as e:
+        logger.debug(f"Failed to log MCP event: {e}")
 
     return {
         "success": result.success,
@@ -475,6 +506,65 @@ async def _get_adaptive_status(
     return result
 
 
+async def _status_update_loop() -> None:
+    """Background task to write MCP status snapshot for dashboard."""
+    status_writer = MCPStatusWriter()
+
+    while True:
+        try:
+            await asyncio.sleep(5)
+
+            router = await get_router()
+
+            # Tier availability
+            availability = {}
+            for tier in [Tier.LOCAL, Tier.HUGGINGFACE, Tier.CLAUDE]:
+                availability[tier.value] = await router.check_tier_availability(tier)
+
+            # Circuit breakers
+            circuit_status = {}
+            try:
+                ollama = await get_ollama_client()
+                circuit_status["ollama"] = ollama.get_circuit_status()
+            except Exception:
+                circuit_status["ollama"] = {"state": "unknown"}
+            try:
+                hf = await get_huggingface_client()
+                circuit_status["huggingface"] = hf.get_circuit_status()
+            except Exception:
+                circuit_status["huggingface"] = {"state": "unknown"}
+
+            # Cache stats
+            cache_stats = {}
+            try:
+                ollama = await get_ollama_client()
+                cache_stats["ollama"] = ollama.get_cache_stats()
+            except Exception:
+                cache_stats["ollama"] = {"enabled": False}
+
+            # Cost and adaptive data
+            cost_tracker = await router._get_cost_tracker()
+            session_summary = cost_tracker.get_session_summary()
+            tier_breakdown = session_summary.get("tier_breakdown", {})
+
+            from esass.mcp.adaptive_router import get_adaptive_router
+            adaptive_router = get_adaptive_router()
+            overrides = adaptive_router.get_all_overrides()
+
+            status_writer.write_status(
+                availability=availability,
+                circuit_breakers=circuit_status,
+                cache_stats=cache_stats,
+                rate_limit=_rate_limiter.get_status(),
+                session_summary=session_summary,
+                tier_breakdown=tier_breakdown,
+                adaptive_overrides=overrides,
+            )
+
+        except Exception as e:
+            logger.debug(f"Status update failed: {e}")
+
+
 async def warmup_models() -> None:
     """Warm up models on startup to reduce first-request latency."""
     logger.info("Warming up models...")
@@ -501,6 +591,9 @@ async def _async_main():
 
     # Warm up models in background
     asyncio.create_task(warmup_models())
+
+    # Start status writer for dashboard integration
+    asyncio.create_task(_status_update_loop())
 
     async with stdio_server() as (read_stream, write_stream):
         await server.run(

@@ -137,10 +137,15 @@ class CostTracker:
 
     def __init__(
         self,
-        data_dir: str = "./data/cost_tracking",
+        data_dir: str = None,
         auto_save_interval: int = 10,  # Save every N executions
         max_memory_logs: int = 1000,   # Max logs to keep in memory
     ):
+        if data_dir is None:
+            base = Path(
+                os.environ.get("ESASS_DATA_DIR", str(Path.home() / ".esass" / "data"))
+            )
+            data_dir = str(base / "mcp" / "cost_tracking")
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

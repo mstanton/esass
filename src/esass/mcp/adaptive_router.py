@@ -105,9 +105,14 @@ class AdaptiveRouter:
 
     def __init__(
         self,
-        data_dir: str = "./data/adaptive_routing",
+        data_dir: str = None,
         config: Optional[AdaptiveConfig] = None,
     ):
+        if data_dir is None:
+            base = Path(
+                os.environ.get("ESASS_DATA_DIR", str(Path.home() / ".esass" / "data"))
+            )
+            data_dir = str(base / "mcp" / "adaptive_routing")
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

@@ -261,6 +261,119 @@ TOOL_COLORS = {
 }
 
 # ============================================================================
+# MCP State
+# ============================================================================
+
+
+class MCPState:
+    """State for MCP server monitoring, read from shared files."""
+
+    def __init__(self):
+        self.enabled = False
+        self.show_panel = True  # Toggled with M key
+        self.last_status_update = None
+
+        # From mcp/status.json
+        self.availability = {}
+        self.circuit_breakers = {}
+        self.cache_stats = {}
+        self.rate_limit = {}
+        self.session_executions = 0
+        self.session_cost = 0.0
+        self.session_savings = 0.0
+        self.savings_percentage = 0.0
+        self.tier_breakdown = {}
+        self.adaptive_overrides = []
+
+        # From mcp_events_{date}.jsonl
+        self.recent_executions = deque(maxlen=20)
+        self.mcp_file_position = 0
+
+        # Sparkline data
+        self.cost_history = deque(maxlen=30)
+        self.savings_history = deque(maxlen=30)
+        self._last_bucket_time = datetime.now()
+        self._bucket_cost = 0.0
+        self._bucket_savings = 0.0
+
+        self._check_enabled()
+
+    def _check_enabled(self):
+        """Check if MCP status file exists."""
+        status_file = ESASS_DATA_DIR / "mcp" / "status.json"
+        mcp_log = LOG_DIR / f"mcp_events_{datetime.now().strftime('%Y%m%d')}.jsonl"
+        self.enabled = status_file.exists() or mcp_log.exists()
+
+    def update_from_status(self):
+        """Read latest mcp/status.json."""
+        status_file = ESASS_DATA_DIR / "mcp" / "status.json"
+        if not status_file.exists():
+            # Re-check periodically
+            self._check_enabled()
+            return
+
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.enabled = True
+            self.last_status_update = data.get("updated_at")
+            self.availability = data.get("availability", {})
+            self.circuit_breakers = data.get("circuit_breakers", {})
+            self.cache_stats = data.get("cache", {})
+            self.rate_limit = data.get("rate_limit", {})
+            self.adaptive_overrides = data.get("adaptive_overrides", [])
+
+            costs = data.get("costs", {})
+            self.session_executions = costs.get("session_executions", 0)
+            self.session_cost = costs.get("session_cost", 0.0)
+            self.session_savings = costs.get("session_savings", 0.0)
+            self.savings_percentage = costs.get("savings_percentage", 0.0)
+            self.tier_breakdown = data.get("tier_breakdown", {})
+
+        except Exception:
+            pass
+
+    def update_from_events(self):
+        """Poll mcp_events_{date}.jsonl for new events."""
+        today = datetime.now().strftime("%Y%m%d")
+        event_file = LOG_DIR / f"mcp_events_{today}.jsonl"
+
+        if not event_file.exists():
+            return
+
+        try:
+            with open(event_file, "r", encoding="utf-8") as f:
+                f.seek(self.mcp_file_position)
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        self.recent_executions.append(event)
+                        # Accumulate for sparklines
+                        ed = event.get("event_data", {})
+                        self._bucket_cost += ed.get("cost_actual", 0.0)
+                        self._bucket_savings += ed.get("savings", 0.0)
+                    except Exception:
+                        pass
+                self.mcp_file_position = f.tell()
+        except Exception:
+            pass
+
+    def update_time_buckets(self):
+        """Update sparkline time buckets (30-second intervals)."""
+        now = datetime.now()
+        if (now - self._last_bucket_time).total_seconds() >= 30:
+            self.cost_history.append(self._bucket_cost)
+            self.savings_history.append(self._bucket_savings)
+            self._bucket_cost = 0.0
+            self._bucket_savings = 0.0
+            self._last_bucket_time = now
+
+
+# ============================================================================
 # State Management
 # ============================================================================
 
@@ -301,6 +414,9 @@ class ESASSState:
         self.show_history = True
         self.flash_alerts = True
         self._flash_state = False  # For blinking effect
+
+        # MCP monitoring state
+        self.mcp = MCPState()
 
         # Load initial state
         self._load_sequence_state()
@@ -413,6 +529,9 @@ class ESASSState:
         elif key == 'C':
             self.recent_events.clear()
             return "Event buffer cleared"
+        elif key == 'M':
+            self.mcp.show_panel = not self.mcp.show_panel
+            return f"MCP panel {'ON' if self.mcp.show_panel else 'OFF'}"
         return None
 
     def _save_snapshot(self):
@@ -445,6 +564,16 @@ class ESASSState:
                 data = alert.get("event_data", alert.get("data", {}))
                 f.write(f"- {data.get('alert_type', 'unknown')}: {data.get('message', '')}\\n")
 
+            if self.mcp.enabled:
+                f.write("\\n")
+                f.write(f"## MCP Server\\n")
+                f.write(f"- **Executions:** {self.mcp.session_executions}\\n")
+                f.write(f"- **Cost:** ${self.mcp.session_cost:.4f}\\n")
+                f.write(f"- **Savings:** ${self.mcp.session_savings:.4f} ({self.mcp.savings_percentage:.0f}%)\\n")
+                f.write(f"- **Tier Breakdown:** {self.mcp.tier_breakdown}\\n")
+                for name, cb in self.mcp.circuit_breakers.items():
+                    f.write(f"- **{name}:** {cb.get('state', 'unknown')}\\n")
+
         return str(filepath)
 
     def update(self):
@@ -475,6 +604,11 @@ class ESASSState:
 
         # Update time-series data for sparklines
         self._update_time_buckets()
+
+        # Update MCP monitoring state
+        self.mcp.update_from_status()
+        self.mcp.update_from_events()
+        self.mcp.update_time_buckets()
 
         # Toggle flash state for blinking alerts
         self._flash_state = not self._flash_state
@@ -652,6 +786,124 @@ def format_event_line(event, max_width=60):
         f"{C.DIM}{time_only}{C.RESET} {color}[{icon}]{tool:5}{C.RESET} "
         f"{C.DIM}{category:<10}{C.RESET} {target[: max_width - 35]}"
     )
+
+
+def format_mcp_event_line(event, max_width=60):
+    """Format MCP execution event for the unified event stream."""
+    ts = event.get("timestamp", "")
+    time_only = ts[11:19] if len(ts) > 11 else "??:??:??"
+
+    data = event.get("event_data", {})
+    event_type = event.get("event_type", "")
+
+    if event_type == "mcp_execution":
+        skill = data.get("skill_name", "?")[:15]
+        tier = data.get("tier_used", "?")
+        success = data.get("success", False)
+        savings = data.get("savings", 0.0)
+
+        tier_color = {
+            "local": C.GREEN,
+            "huggingface": C.YELLOW,
+            "claude": C.MAGENTA,
+        }.get(tier, C.WHITE)
+
+        status = f"{C.GREEN}{Sym.CHECK}{C.RESET}" if success else f"{C.RED}{Sym.CROSS}{C.RESET}"
+
+        return (
+            f"{C.DIM}{time_only}{C.RESET} {C.MAGENTA}[M]{C.RESET} "
+            f"{skill:15} {status} {tier_color}{tier:10}{C.RESET} "
+            f"{C.GREEN}${savings:.4f}{C.RESET}"
+        )
+
+    elif event_type == "mcp_circuit_breaker":
+        name = data.get("name", "?")
+        new_state = data.get("new_state", "?")
+        state_color = {"closed": C.GREEN, "open": C.RED, "half_open": C.YELLOW}.get(
+            new_state.lower(), C.WHITE
+        )
+        return (
+            f"{C.DIM}{time_only}{C.RESET} {C.RED}[!]{C.RESET} "
+            f"CB {name} {state_color}{Sym.ARROW} {new_state}{C.RESET}"
+        )
+
+    elif event_type == "mcp_tier_override":
+        skill = data.get("skill_name", "?")[:15]
+        new_tier = data.get("new_tier", "?")
+        return (
+            f"{C.DIM}{time_only}{C.RESET} {C.YELLOW}[~]{C.RESET} "
+            f"{skill:15} {Sym.ARROW} {new_tier}"
+        )
+
+    return f"{C.DIM}{time_only} [M] {event_type}{C.RESET}"
+
+
+def render_mcp_panel(state, term_width):
+    """Render the MCP server monitoring panel as lines."""
+    mcp = state.mcp
+    col_width = (term_width - 10) // 3
+
+    # Column 1: Availability + Circuit Breakers
+    col1 = [f"{C.BOLD}MCP Server{C.RESET}", ""]
+
+    for tier, available in mcp.availability.items():
+        indicator = f"{C.GREEN}{Sym.CHECK}{C.RESET}" if available else f"{C.RED}{Sym.CROSS}{C.RESET}"
+        col1.append(f"{tier:12} {indicator}")
+
+    col1.append("")
+    for name, status in mcp.circuit_breakers.items():
+        cb_state = status.get("state", "unknown").lower()
+        if cb_state == "closed":
+            color, symbol = C.GREEN, Sym.CIRCLE
+        elif cb_state == "open":
+            color, symbol = C.RED, Sym.CROSS
+        elif cb_state == "half_open":
+            color, symbol = C.YELLOW, Sym.BULLET
+        else:
+            color, symbol = C.DIM, Sym.DOT
+        col1.append(f"{name:12} {color}{symbol} {cb_state}{C.RESET}")
+
+    # Column 2: Tier Distribution
+    col2 = [f"{C.BOLD}Tier Distribution{C.RESET}", ""]
+    total = mcp.session_executions or 1
+    for tier, count in sorted(mcp.tier_breakdown.items(), key=lambda x: -x[1]):
+        pct = (count / total) * 100
+        gauge = render_gauge(count, total, 8, {
+            "local": C.GREEN, "huggingface": C.YELLOW, "claude": C.MAGENTA,
+        }.get(tier, C.WHITE))
+        col2.append(f"{tier:10} {gauge} {count:2} ({pct:.0f}%)")
+
+    # Cache stats
+    col2.append("")
+    for name, stats in mcp.cache_stats.items():
+        if isinstance(stats, dict) and stats.get("enabled", True):
+            size = stats.get("size", 0)
+            max_size = stats.get("max_size", 50)
+            hits = stats.get("total_hits", 0)
+            misses = stats.get("total_misses", 0)
+            hit_rate = (hits / (hits + misses) * 100) if (hits + misses) > 0 else 0
+            col2.append(f"Cache: {size}/{max_size} ({hit_rate:.0f}% hit)")
+
+    # Column 3: Cost Tracking
+    col3 = [f"{C.BOLD}Cost Tracking{C.RESET}", ""]
+    col3.append(f"Executions:  {mcp.session_executions}")
+    col3.append(f"Cost:        ${mcp.session_cost:.4f}")
+    col3.append(f"Savings:     {C.GREEN}${mcp.session_savings:.4f}{C.RESET} ({mcp.savings_percentage:.0f}%)")
+
+    # Savings sparkline
+    if mcp.savings_history:
+        spark = Sparkline.render(list(mcp.savings_history), width=10, color=C.GREEN)
+        col3.append(f"Trend:       {spark}")
+
+    # Rate limit
+    rl = mcp.rate_limit
+    if rl:
+        avail = rl.get("available_tokens", 0)
+        cap = rl.get("capacity", 10)
+        rl_gauge = render_gauge(avail, cap, 8)
+        col3.append(f"Rate:        {rl_gauge} {avail:.0f}/{cap}")
+
+    return col1, col2, col3
 
 
 # ============================================================================
@@ -880,6 +1132,34 @@ def render_dashboard(state: ESASSState, first_render=False, status_message=None)
     print_line(f"  {C.DIM}{'─' * (term_width - 4)}{C.RESET}")
     print_line()
 
+    # Row 2.5: MCP Server Panel (if enabled and detected)
+    if state.mcp.enabled and state.mcp.show_panel:
+        mcp_col1, mcp_col2, mcp_col3 = render_mcp_panel(state, term_width)
+
+        max_mcp_rows = max(len(mcp_col1), len(mcp_col2), len(mcp_col3))
+        for i in range(max_mcp_rows):
+            c1 = mcp_col1[i] if i < len(mcp_col1) else ""
+            c2 = mcp_col2[i] if i < len(mcp_col2) else ""
+            c3 = mcp_col3[i] if i < len(mcp_col3) else ""
+
+            p1 = c1 + " " * max(
+                0,
+                35 - len(str(c1).replace("\033", ""))
+                if "\033" in str(c1)
+                else 35 - len(str(c1)),
+            )
+            p2 = c2 + " " * max(
+                0,
+                30 - len(str(c2).replace("\033", ""))
+                if "\033" in str(c2)
+                else 30 - len(str(c2)),
+            )
+            print_line(f"  {p1} {p2} {c3}")
+
+        print_line()
+        print_line(f"  {C.DIM}{'─' * (term_width - 4)}{C.RESET}")
+        print_line()
+
     # Row 3: Pattern Formation
     print_line(f"  {C.BOLD}Pattern Formation & Skill Crystallization{C.RESET}")
     print_line()
@@ -915,9 +1195,12 @@ def render_dashboard(state: ESASSState, first_render=False, status_message=None)
     print_line(f"  {C.DIM}{'─' * (term_width - 4)}{C.RESET}")
     print_line()
 
-    # Row 4: Raw Event Stream (last 15 events)
+    # Row 4: Unified Event Stream (tool calls + MCP executions)
+    mcp_label = ""
+    if state.mcp.enabled:
+        mcp_label = f" + {len(state.mcp.recent_executions)} MCP"
     print_line(
-        f"  {C.BOLD}Raw Event Stream{C.RESET} {C.DIM}(latest {min(15, len(state.recent_events))} of {state.total_events} events){C.RESET}"
+        f"  {C.BOLD}Unified Event Stream{C.RESET} {C.DIM}(latest of {state.total_events} events{mcp_label}){C.RESET}"
     )
     print_line()
 
@@ -926,36 +1209,48 @@ def render_dashboard(state: ESASSState, first_render=False, status_message=None)
         import shutil
 
         term_height = shutil.get_terminal_size().lines
-        # Calculate available lines (rough estimate: header ~4, field ~12, metrics ~8, skills ~6, footer ~2)
-        available_lines = max(5, min(15, term_height - 35))
+        # Adjust for MCP panel height
+        mcp_overhead = 12 if (state.mcp.enabled and state.mcp.show_panel) else 0
+        available_lines = max(5, min(15, term_height - 35 - mcp_overhead))
     except Exception:
         available_lines = 10
 
-    events_to_show = list(state.recent_events)[-available_lines:]
+    # Merge tool events and MCP events by timestamp
+    tool_events = [(e, "tool") for e in list(state.recent_events)[-available_lines:]]
+    mcp_events = [(e, "mcp") for e in list(state.mcp.recent_executions)[-available_lines:]] if state.mcp.enabled else []
+
+    all_events = tool_events + mcp_events
+    # Sort by timestamp (newest first for display)
+    all_events.sort(key=lambda x: x[0].get("timestamp", ""), reverse=True)
+    events_to_show = all_events[:available_lines]
 
     if events_to_show:
         # Header row
         print_line(
-            f"  {C.DIM}{'TIME':<10} {'TOOL':<8} {'CATEGORY':<15} {'TARGET':<40}{C.RESET}"
+            f"  {C.DIM}{'TIME':<10} {'SOURCE':<8} {'DETAIL':<50}{C.RESET}"
         )
-        print_line(f"  {C.DIM}{'─' * 10} {'─' * 8} {'─' * 15} {'─' * 40}{C.RESET}")
+        print_line(f"  {C.DIM}{'─' * 10} {'─' * 8} {'─' * 50}{C.RESET}")
 
-        for event in reversed(events_to_show):
-            print_line(f"  {format_event_line(event, term_width - 15)}")
+        for event, source in events_to_show:
+            if source == "mcp":
+                print_line(f"  {format_mcp_event_line(event, term_width - 15)}")
+            else:
+                print_line(f"  {format_event_line(event, term_width - 15)}")
     else:
         print_line(f"  {C.DIM}No events captured yet...{C.RESET}")
 
     print_line()
 
-    # Footer with keyboard shortcuts (Phase 3.1)
+    # Footer with keyboard shortcuts
     last_event_ago = ""
     if state.last_event_time:
         ago = (datetime.now() - state.last_event_time).total_seconds()
         last_event_ago = f" │ Last: {ago:.0f}s ago"
 
-    shortcuts = f"[H]istory:[{'ON' if state.show_history else 'OFF'}] [S]napshot [C]lear"
+    mcp_key = f" [M]CP:[{'ON' if state.mcp.show_panel else 'OFF'}]" if state.mcp.enabled else ""
+    shortcuts = f"[H]istory:[{'ON' if state.show_history else 'OFF'}]{mcp_key} [S]napshot [C]lear"
     print_line(
-        f"  {C.DIM}{shortcuts}{last_event_ago} │ {len(events_to_show)}/{len(state.recent_events)} events │ Ctrl+C to exit{C.RESET}"
+        f"  {C.DIM}{shortcuts}{last_event_ago} │ {len(events_to_show)} events │ Ctrl+C to exit{C.RESET}"
     )
 
     # Flush the entire frame buffer in one write (flicker-free)
@@ -1019,6 +1314,9 @@ def main():
         print(f"  Total events: {state.total_events}")
         print(f"  Patterns tracked: {len(state.sequences)}")
         print(f"  Skills forming: {len(state.skill_candidates)}")
+        if state.mcp.enabled:
+            print(f"  MCP executions: {state.mcp.session_executions}")
+            print(f"  MCP savings: ${state.mcp.session_savings:.4f} ({state.mcp.savings_percentage:.0f}%)")
         print()
 
 
