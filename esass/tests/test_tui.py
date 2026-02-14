@@ -1,6 +1,6 @@
 import pytest
-from esass.tui.app import ESASSApp
-from esass.tui.parser import StreamParser
+from esass_prototype.tui.app import ESASSApp
+from esass_prototype.tui.parser import StreamParser
 
 
 @pytest.mark.asyncio

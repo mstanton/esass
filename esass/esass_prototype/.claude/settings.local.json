@@ -6,5 +6,8 @@
       "Bash(python -m examples.verify_realtime:*)",
       "Bash(python -m pytest:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "local-llm-mcp"
+  ]
 }

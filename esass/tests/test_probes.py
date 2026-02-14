@@ -22,7 +22,7 @@ from esass.probes.pipeline import EventPipeline
 from esass.probes.reasoning_probe import ReasoningProbe
 from esass.probes.registry import ProbeRegistry
 from esass.probes.tool_probe import ToolCallProbe
-from esass.models import LogEntry
+from esass_prototype.models import LogEntry
 
 # =============================================================================
 # Base Probe Tests

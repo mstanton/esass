@@ -1,14 +1,14 @@
 
 import pytest
 
-from esass.analysis.pattern_detector import TemporalPatternDetector
-from esass.export.obsidian import ObsidianExporter
-from esass.genesis.template import SkillTemplateGenerator
-from esass.observation.logger import ObservationLogger
-from esass.observation.simulator import EventSimulator
-from esass.storage.log_store import LogStore
-from esass.storage.pattern_store import PatternStore
-from esass.storage.skill_store import SkillStore
+from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
+from esass_prototype.export.obsidian import ObsidianExporter
+from esass_prototype.genesis.template import SkillTemplateGenerator
+from esass_prototype.observation.logger import ObservationLogger
+from esass_prototype.observation.simulator import EventSimulator
+from esass_prototype.storage.log_store import LogStore
+from esass_prototype.storage.pattern_store import PatternStore
+from esass_prototype.storage.skill_store import SkillStore
 
 
 @pytest.fixture

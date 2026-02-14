@@ -1,0 +1,26 @@
+# ESASS Configuration
+# See: https://github.com/your-org/esass for documentation
+
+observation:
+  enabled: true
+  mode: live
+
+storage:
+  log_format: jsonl
+  max_log_age_days: 90
+  # data_dir is set automatically to .esass/data/
+
+pattern_detection:
+  min_support: 10
+  min_confidence: 0.8
+  min_stability_days: 7
+
+probes:
+  enabled: true
+  buffer_size: 100
+  flush_interval: 5.0
+
+# local_llm:
+#   enabled: true
+#   ollama_endpoint: http://localhost:11434
+#   ollama_model: gemma3:4b

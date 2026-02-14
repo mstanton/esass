@@ -1,20 +1,29 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python esass_cli.py test:*)",
-      "Bash(python esass_cli.py stats:*)",
-      "Bash(python esass_cli.py:*)",
-      "Bash(dir:*)",
+      "Bash(python -m esass_prototype.cli pipeline:*)",
+      "Bash(pip install:*)",
+      "Bash(python test_pipeline.py:*)",
+      "Bash(ls:*)",
+      "Bash(python -c:*)",
+      "Bash(curl:*)",
+      "Bash(sh)",
+      "Bash(python setup_files.py:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run python:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(find:*)",
+      "Bash(uv run esass --help:*)",
+      "Bash(uv run:*)",
+      "Bash(python -m pytest:*)",
       "Bash(python:*)",
-      "Bash(cd:*)",
-      "Bash(start cmd /k \"python C:/workspace/ESASS/esass/esass/hooks/stream-viewer.py\")",
-      "Bash(start cmd /k \"cd /d C:\\\\workspace\\\\ESASS\\\\esass && python esass/hooks/stream-viewer.py\")",
-      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\stream-viewer.bat\")",
-      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\dashboard.bat\")",
-      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\simulate.bat\")",
-      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\field_monitor.bat\")",
-      "Bash(start \"\" \"C:\\\\workspace\\\\ESASS\\\\esass\\\\esass\\\\hooks\\\\esass_dashboard.bat\")",
-      "WebSearch"
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(grep:*)"
     ]
   }
 }

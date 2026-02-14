@@ -15,9 +15,9 @@ from uuid import uuid4
 
 import pytest
 
-from esass.analysis.behavioral_detector import BehavioralPatternDetector
-from esass.analysis.semantic_detector import SemanticPatternDetector
-from esass.models import (
+from esass_prototype.analysis.behavioral_detector import BehavioralPatternDetector
+from esass_prototype.analysis.semantic_detector import SemanticPatternDetector
+from esass_prototype.models import (
     EventType,
     LogEntry,
     PatternDefinition,
@@ -28,15 +28,15 @@ from esass.models import (
     create_reasoning_event,
     create_tool_usage_event,
 )
-from esass.observation.simulator import EventSimulator
-from esass.storage.interfaces import (
+from esass_prototype.observation.simulator import EventSimulator
+from esass_prototype.storage.interfaces import (
     LogStoreInterface,
     PatternStoreInterface,
     SkillStoreInterface,
 )
-from esass.storage.log_store import LogStore
-from esass.storage.pattern_store import PatternStore
-from esass.storage.skill_store import SkillStore
+from esass_prototype.storage.log_store import LogStore
+from esass_prototype.storage.pattern_store import PatternStore
+from esass_prototype.storage.skill_store import SkillStore
 
 
 # ── Fixtures ────────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ class TestBehavioralPatternDetector:
 class TestMultiDetectorIntegration:
     def test_all_detectors_on_same_data(self, simulated_logs):
         """All three detector types can run on the same data without conflict."""
-        from esass.analysis.pattern_detector import TemporalPatternDetector
+        from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
 
         temporal = TemporalPatternDetector(
             min_support=2, min_confidence=0.3, min_stability_days=0,
@@ -450,7 +450,7 @@ class TestMultiDetectorIntegration:
 
     def test_all_patterns_storable(self, simulated_logs, temp_data_dir):
         """All pattern types can be saved and loaded from PatternStore."""
-        from esass.analysis.pattern_detector import TemporalPatternDetector
+        from esass_prototype.analysis.pattern_detector import TemporalPatternDetector
 
         temporal = TemporalPatternDetector(
             min_support=2, min_confidence=0.3, min_stability_days=0,
@@ -484,12 +484,12 @@ class TestMultiDetectorIntegration:
 
     def test_module_imports(self):
         """All new classes are importable from the package __init__."""
-        from esass.analysis import (
+        from esass_prototype.analysis import (
             BehavioralPatternDetector,
             SemanticPatternDetector,
             TemporalPatternDetector,
         )
-        from esass.storage import (
+        from esass_prototype.storage import (
             LogStore,
             LogStoreInterface,
             PatternStore,
