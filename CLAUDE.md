@@ -30,7 +30,7 @@ src/esass/
 ├── models.py            # Core data models
 ├── cli/main.py          # Click CLI (esass command, all subcommands)
 ├── cli/init_cmd.py      # esass init
-├── probes/              # 8 observation probes (base.py, config.py, tool_call.py, ...)
+├── probes/              # 10 observation probes (base.py, config.py, tool_probe.py, ...)
 ├── hooks/               # Claude Code hooks
 │   ├── post_tool_use.py # Main hook entry point
 │   ├── session_start.py # Session startup
@@ -96,11 +96,14 @@ MCP config is at `esass.mcp.mcp_config` (renamed from `config.py` to avoid clash
 
 ### Probe System
 
-8 probes observe every tool call and produce structured log entries:
+10 probes observe every tool call and produce structured log entries:
 - ToolCallProbe, ToolSequenceDetector
 - ReasoningProbe, CausalReasoningProbe
 - DecisionProbe, TradeoffAnalysisProbe
 - CalibrationProbe, InsightProbe
+- ErrorRecoveryProbe, StrategyShiftProbe
+- ScopeExpansionProbe, ReliabilityProbe
+- FieldBoundaryProbe, LatencyProbe, LogicLoopProbe
 
 All probes extend `FilteringProbe` from `src/esass/probes/base.py`. Probes must never crash the system -- errors are logged and swallowed.
 

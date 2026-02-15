@@ -51,7 +51,7 @@ Claude Code session
       │     └── python -m esass.hooks.post_tool_use
       │           ├── logs event to .esass/data/logs/
       │           ├── updates sequence tracker
-      │           └── runs 8 specialized probes
+      │           └── runs 10 specialized probes
       │
       ├── MCP server (if enabled)
       │     ├── executes skills via local LLM (Ollama)
@@ -174,15 +174,23 @@ src/esass/
 ├── cli/                 # Click CLI (esass command)
 │   ├── main.py          # Command group and all subcommands
 │   └── init_cmd.py      # esass init logic
-├── probes/              # 8 specialized observation probes
+├── probes/              # 10 specialized observation probes
 │   ├── base.py          # Probe ABC, FilteringProbe, TagExtractor
 │   ├── config.py        # Probe configuration and initialization
-│   ├── tool_call.py     # Tool usage and sequence detection
-│   ├── reasoning.py     # Reasoning and causal chain tracking
-│   ├── decision.py      # Decision and tradeoff analysis
-│   ├── calibration.py   # Confidence calibration
-│   ├── insight.py       # Insight and realization detection
-│   └── ...
+│   ├── pipeline.py      # Event pipeline (sync, async, priority)
+│   ├── registry.py      # Probe registry and lifecycle
+│   ├── tool_probe.py    # Tool usage and sequence detection
+│   ├── reasoning_probe.py # Reasoning and causal chain tracking
+│   ├── decision_probe.py  # Decision and tradeoff analysis
+│   ├── calibration_probe.py # Confidence calibration
+│   ├── insight_probe.py   # Insight and realization detection
+│   ├── error_recovery_probe.py # Error recovery tracking
+│   ├── strategy_shift_probe.py # Strategy shift detection
+│   ├── scope_expansion_probe.py # Scope creep detection
+│   ├── reliability_probe.py # Tool reliability tracking
+│   ├── field_boundary_probe.py # Field boundary monitoring
+│   ├── latency_probe.py  # Latency tracking
+│   └── logic_loop_probe.py # Logic loop detection
 ├── hooks/               # Claude Code hook entry points
 │   ├── post_tool_use.py # Main hook (python -m esass.hooks.post_tool_use)
 │   ├── session_start.py # Session startup hook
@@ -294,7 +302,7 @@ Available in Claude Code sessions when the MCP server is running:
 ## Testing
 
 ```bash
-# All tests (150+)
+# All tests (164)
 pytest
 
 # Probe tests (27 tests)

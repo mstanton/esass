@@ -47,7 +47,8 @@
       "Bash(pip show:*)",
       "Bash(esass:*)",
       "Bash(pytest:*)",
-      "mcp__local-llm-mcp__get_routing_stats"
+      "mcp__local-llm-mcp__get_routing_stats",
+      "Bash(git push:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
