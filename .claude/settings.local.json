@@ -43,7 +43,11 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git rm:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(pip show:*)",
+      "Bash(esass:*)",
+      "Bash(pytest:*)",
+      "mcp__local-llm-mcp__get_routing_stats"
     ]
   },
   "enableAllProjectMcpServers": true,

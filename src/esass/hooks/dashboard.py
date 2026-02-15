@@ -44,7 +44,12 @@ except Exception:
 # Configuration
 # ============================================================================
 
-ESASS_DATA_DIR = Path(os.environ.get("ESASS_DATA_DIR", Path.home() / ".esass" / "data"))
+try:
+    from esass.config import load_config, get_data_dir
+    _cfg = load_config()
+    ESASS_DATA_DIR = get_data_dir(_cfg)
+except Exception:
+    ESASS_DATA_DIR = Path(os.environ.get("ESASS_DATA_DIR", Path.home() / ".esass" / "data"))
 LOG_DIR = ESASS_DATA_DIR / "logs"
 CLAUDE_CONFIG_DIR = Path.home() / ".claude"
 REFRESH_RATE = 0.5

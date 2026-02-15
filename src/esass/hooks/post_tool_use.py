@@ -251,7 +251,7 @@ def main():
         debug_log = ESASS_DATA_DIR / "logs" / "hook_debug.log"
         with open(debug_log, "a", encoding="utf-8") as f:
             f.write(
-                f"[{datetime.now().isoformat()}] Raw keys: {list(hook_data.keys())}\n"
+                f"[{datetime.now().isoformat()}] Keys: {list(hook_data.keys())}\n"
             )
 
         tool_name = hook_data.get("tool_name", hook_data.get("name", "unknown"))
