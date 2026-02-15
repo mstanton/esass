@@ -185,7 +185,7 @@ async def test_ollama_connection():
     """Test Ollama connection."""
     print("\n=== Testing Ollama Connection ===")
 
-    from ollama_client import get_ollama_client
+    from esass.mcp.ollama_client import get_ollama_client
 
     client = await get_ollama_client()
     available = await client.is_available()

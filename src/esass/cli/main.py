@@ -359,12 +359,12 @@ def stats():
     click.echo("=== ESASS Statistics\n")
 
     click.echo("Observation Logs:")
-    click.echo(f"  Total entries: {log_stats.get('total_entries', 0)}")
+    click.echo(f"  Total entries: {log_stats.get('total_events', 0)}")
     click.echo(f"  Total sessions: {log_stats.get('total_sessions', 0)}")
 
-    if log_stats.get("date_range"):
+    if log_stats.get("start_date") and log_stats.get("end_date"):
         click.echo(
-            f"  Date range: {log_stats['date_range']['start'][:10]} to {log_stats['date_range']['end'][:10]}"
+            f"  Date range: {log_stats['start_date'][:10]} to {log_stats['end_date'][:10]}"
         )
 
     click.echo("\nPatterns:")

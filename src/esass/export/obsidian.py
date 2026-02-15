@@ -211,7 +211,7 @@ This pattern meets the criteria for skill generation:
             skills: List of skills
         """
         for skill in skills:
-            safe_name = skill.name.replace(' ', '_').lower()
+            safe_name = skill.name.replace(' ', '_').lower()[:80]
             filename = f"{safe_name}.md"
             filepath = self.esass_dir / "skills" / filename
 
