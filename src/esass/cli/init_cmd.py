@@ -175,7 +175,9 @@ def _create_claude_command(project_dir: Path):
 
 
 def _configure_mcp(project_dir: Path, ollama_model: str = "gemma3:4b"):
-    """Add esass-mcp-server to .mcp.json."""
+    """Add esass-mcp-server to .mcp.json with env vars from global config."""
+    from esass.config import load_global_mcp_env
+
     mcp_file = project_dir / ".mcp.json"
 
     if mcp_file.exists():
@@ -192,17 +194,82 @@ def _configure_mcp(project_dir: Path, ollama_model: str = "gemma3:4b"):
         _echo_step("MCP server already configured, skipping", ok=False)
         return
 
+    # Build env from global config, with explicit model override
+    env = load_global_mcp_env()
+    env["OLLAMA_MODEL"] = ollama_model
+
     servers["local-llm-mcp"] = {
-        "command": "esass-mcp-server",
-        "env": {
-            "OLLAMA_MODEL": ollama_model,
-        },
+        "command": "python -m esass.mcp.server",
+        "env": env,
     }
 
     existing["mcpServers"] = servers
     mcp_file.write_text(json.dumps(existing, indent=2) + "\n")
 
-    _echo_step(f"Added esass-mcp-server to .mcp.json")
+    _echo_step("Added esass-mcp-server to .mcp.json")
+
+
+def _create_claude_settings(project_dir: Path):
+    """Create .claude/settings.local.json with MCP permissions pre-approved."""
+    settings_dir = project_dir / ".claude"
+    settings_dir.mkdir(parents=True, exist_ok=True)
+
+    settings_file = settings_dir / "settings.local.json"
+
+    if settings_file.exists():
+        try:
+            existing = json.loads(settings_file.read_text())
+        except (json.JSONDecodeError, ValueError):
+            existing = {}
+    else:
+        existing = {}
+
+    # Ensure MCP tools are in the allow list
+    permissions = existing.get("permissions", {})
+    allow = set(permissions.get("allow", []))
+
+    mcp_tools = [
+        "mcp__local-llm-mcp__execute_skill",
+        "mcp__local-llm-mcp__analyze_pattern",
+        "mcp__local-llm-mcp__generate_skill_name",
+        "mcp__local-llm-mcp__check_availability",
+        "mcp__local-llm-mcp__get_routing_stats",
+        "mcp__local-llm-mcp__get_cost_dashboard",
+        "mcp__local-llm-mcp__get_full_analytics",
+        "mcp__local-llm-mcp__get_adaptive_status",
+    ]
+    allow.update(mcp_tools)
+
+    permissions["allow"] = sorted(allow)
+    existing["permissions"] = permissions
+
+    settings_file.write_text(json.dumps(existing, indent=2) + "\n")
+    _echo_step("Created .claude/settings.local.json with MCP permissions")
+
+
+def _quick_init(project_dir: Path, ollama_model: str):
+    """Fast bootstrap: .mcp.json + .claude/settings.local.json + data dirs only."""
+    from esass.config import ensure_global_config
+
+    # Ensure global config exists
+    ensure_global_config()
+
+    # Create data dirs
+    esass_dir = project_dir / ".esass"
+    data_dir = esass_dir / "data"
+    for subdir in ["logs", "state", "patterns", "skills"]:
+        (data_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    # Create .mcp.json with MCP server
+    _configure_mcp(project_dir, ollama_model)
+
+    # Create .claude/settings.local.json with permissions
+    _create_claude_settings(project_dir)
+
+    click.echo(
+        click.style("  ESASS ready!", fg="green", bold=True)
+        + f" ({project_dir.name})"
+    )
 
 
 @click.command("init")
@@ -217,9 +284,17 @@ def _configure_mcp(project_dir: Path, ollama_model: str = "gemma3:4b"):
     "--ollama-model", default="gemma3:4b", help="Ollama model for MCP server"
 )
 @click.option("--yes", "-y", is_flag=True, help="Non-interactive mode")
-def init(global_install, enable_mcp, ollama_model, yes):
+@click.option(
+    "--quick", "-q", is_flag=True,
+    help="Fast bootstrap: .mcp.json + permissions + data dirs",
+)
+def init(global_install, enable_mcp, ollama_model, yes, quick):
     """Initialize ESASS in the current project."""
     project_dir = Path.cwd()
+
+    if quick:
+        _quick_init(project_dir, ollama_model)
+        return
 
     click.echo()
     click.echo(click.style("  ESASS Init", bold=True))

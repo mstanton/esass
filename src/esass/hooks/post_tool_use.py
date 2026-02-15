@@ -177,7 +177,39 @@ def log_event(event_type: str, data: dict):
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
+    # Rollup to global log for cross-project learning
+    _rollup_to_global(entry)
+
     return entry["event_id"]
+
+
+def _rollup_to_global(entry: dict):
+    """Append event to the global unified log at ~/.esass/data/logs/.
+
+    Tags each event with the originating project directory.
+    Silently skips if the global log dir is the same as the project-local one.
+    """
+    try:
+        global_log_dir = Path.home() / ".esass" / "data" / "logs"
+        local_log_dir = ESASS_DATA_DIR / "logs"
+
+        # Avoid duplication when global == local
+        if global_log_dir.resolve() == local_log_dir.resolve():
+            return
+
+        global_log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Tag with project name
+        entry_copy = dict(entry)
+        entry_copy["project_dir"] = Path.cwd().name
+
+        today = datetime.now().strftime("%Y%m%d")
+        global_log_file = global_log_dir / f"log_{today}.jsonl"
+
+        with open(global_log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry_copy) + "\n")
+    except Exception:
+        pass  # Never crash the hook
 
 
 def update_sequence_state(tool_name: str, context: dict):

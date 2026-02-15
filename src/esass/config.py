@@ -194,3 +194,89 @@ def get_export_dir(config: Optional[ESASSConfig] = None) -> Path:
     if config is None:
         config = get_config()
     return Path(config.export.export_dir)
+
+
+def get_global_data_dir() -> Path:
+    """Return the global data directory (~/.esass/data/)."""
+    return Path.home() / ".esass" / "data"
+
+
+_GLOBAL_CONFIG_DEFAULTS = {
+    "observation": {"enabled": True, "mode": "live"},
+    "storage": {
+        "log_format": "jsonl",
+        "max_log_age_days": 90,
+    },
+    "pattern_detection": {
+        "min_support": 10,
+        "min_confidence": 0.8,
+        "min_stability_days": 7,
+    },
+    "local_llm": {
+        "enabled": True,
+        "ollama_model": "gemma3:4b",
+        "hf_model": "mistralai/Mistral-7B-Instruct-v0.3",
+        "hf_token": "",
+    },
+    "mcp_env": {
+        "OLLAMA_MODEL": "gemma3:4b",
+        "HF_TOKEN": "",
+    },
+}
+
+
+def ensure_global_config() -> Path:
+    """Create ~/.esass/config.yaml with sensible defaults if it doesn't exist.
+
+    Returns the path to the global config file.
+    """
+    global_dir = Path.home() / ".esass"
+    global_dir.mkdir(parents=True, exist_ok=True)
+
+    config_file = global_dir / "config.yaml"
+    if config_file.exists():
+        return config_file
+
+    # Create global data dirs
+    data_dir = global_dir / "data"
+    for subdir in ["logs", "state", "patterns", "skills", "mcp"]:
+        (data_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+    with open(config_file, "w") as f:
+        yaml.dump(_GLOBAL_CONFIG_DEFAULTS, f, default_flow_style=False, sort_keys=False)
+
+    return config_file
+
+
+def load_global_mcp_env() -> dict:
+    """Load MCP environment variables from the global config.
+
+    Returns a dict of env var name -> value suitable for .mcp.json.
+    """
+    global_config = Path.home() / ".esass" / "config.yaml"
+    mcp_env = dict(_GLOBAL_CONFIG_DEFAULTS.get("mcp_env", {}))
+
+    if global_config.exists():
+        try:
+            with open(global_config, "r") as f:
+                data = yaml.safe_load(f) or {}
+            stored = data.get("mcp_env", {})
+            if stored:
+                mcp_env.update(stored)
+            # Also pull from local_llm section
+            llm = data.get("local_llm", {})
+            if llm.get("ollama_model"):
+                mcp_env.setdefault("OLLAMA_MODEL", llm["ollama_model"])
+            if llm.get("hf_token"):
+                mcp_env.setdefault("HF_TOKEN", llm["hf_token"])
+        except Exception:
+            pass
+
+    # Environment variables take precedence
+    for key in ["OLLAMA_MODEL", "HF_TOKEN", "OLLAMA_ENDPOINT"]:
+        env_val = os.environ.get(key)
+        if env_val:
+            mcp_env[key] = env_val
+
+    # Remove empty values
+    return {k: v for k, v in mcp_env.items() if v}

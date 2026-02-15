@@ -499,20 +499,46 @@ def tail(n):
 
 
 @esass.command("logs")
-@click.option("-n", "--lines", default=50, help="Number of lines to show initially")
-@click.option("-f", "--follow", is_flag=True, default=False, help="Follow log output in real-time")
-@click.option("--level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]), default=None, help="Filter by minimum log level")
-def logs(lines, follow, level):
-    """View MCP server logs.
+@click.option("-n", "--lines", default=50, help="Lines to show")
+@click.option("-f", "--follow", is_flag=True, help="Follow in real-time")
+@click.option(
+    "--level", default=None,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+    help="Filter by minimum log level",
+)
+@click.option(
+    "--mcp", "mcp_mode", is_flag=True,
+    help="Show MCP server logs",
+)
+@click.option(
+    "--project", "project_only", is_flag=True,
+    help="Show only current project's events",
+)
+def logs(lines, follow, level, mcp_mode, project_only):
+    """View ESASS event logs or MCP server logs.
 
-    Shows the local LLM MCP server log file. Use -f to follow in real-time.
+    By default shows the global unified event stream from all projects.
+    Use --mcp to view MCP server debug logs instead.
+    Use --project to filter to the current project only.
 
     Examples:
-        esass logs              # Last 50 lines
-        esass logs -f           # Follow in real-time
-        esass logs -n 100       # Last 100 lines
-        esass logs --level ERROR  # Only errors
+        esass logs              # Global unified event stream
+        esass logs -f           # Follow global stream in real-time
+        esass logs --project    # Only current project's events
+        esass logs --mcp        # MCP server debug logs
+        esass logs --mcp -f     # Follow MCP logs in real-time
     """
+    import time as _time
+
+    if mcp_mode:
+        _show_mcp_logs(lines, follow, level)
+        return
+
+    _show_event_logs(lines, follow, project_only)
+
+
+def _show_mcp_logs(lines, follow, level):
+    """Show MCP server logs (original behavior)."""
     import time as _time
 
     config = get_config()
@@ -525,13 +551,12 @@ def logs(lines, follow, level):
         click.echo("Start it via Claude Code with the local-llm-mcp server configured.")
         return
 
-    # Color map for log levels
     colors = {
-        "DEBUG": "\033[90m",     # gray
-        "INFO": "\033[36m",      # cyan
-        "WARNING": "\033[33m",   # yellow
-        "ERROR": "\033[31m",     # red
-        "CRITICAL": "\033[1;31m",  # bold red
+        "DEBUG": "\033[90m",
+        "INFO": "\033[36m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[1;31m",
     }
     reset = "\033[0m"
 
@@ -552,7 +577,6 @@ def logs(lines, follow, level):
                 return True
         return False
 
-    # Read and display last N lines
     try:
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             all_lines = f.readlines()
@@ -574,12 +598,11 @@ def logs(lines, follow, level):
     if not follow:
         return
 
-    # Follow mode - tail the file
     click.echo(f"\n\033[90m--- Following (Ctrl+C to stop) ---\033[0m\n")
 
     try:
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
-            f.seek(0, 2)  # end of file
+            f.seek(0, 2)
             while True:
                 line = f.readline()
                 if line:
@@ -589,6 +612,156 @@ def logs(lines, follow, level):
                     _time.sleep(0.2)
     except KeyboardInterrupt:
         click.echo(f"\n\033[90m--- Stopped ---\033[0m")
+
+
+# Project color palette for the unified event stream
+_PROJECT_COLORS = [
+    "\033[36m",   # cyan
+    "\033[33m",   # yellow
+    "\033[35m",   # magenta
+    "\033[32m",   # green
+    "\033[34m",   # blue
+    "\033[91m",   # light red
+    "\033[96m",   # light cyan
+    "\033[93m",   # light yellow
+]
+
+
+def _show_event_logs(lines, follow, project_only):
+    """Show unified ESASS event stream from global or project-local logs."""
+    import json
+    import time as _time
+    from esass.config import get_global_data_dir
+
+    reset = "\033[0m"
+    dim = "\033[90m"
+    bold = "\033[1m"
+
+    current_project = Path.cwd().name
+    project_color_map = {}
+
+    def _get_project_color(project_name: str) -> str:
+        if project_name not in project_color_map:
+            idx = len(project_color_map) % len(_PROJECT_COLORS)
+            project_color_map[project_name] = _PROJECT_COLORS[idx]
+        return project_color_map[project_name]
+
+    def _format_event(event: dict) -> str:
+        ts = event.get("timestamp", "")
+        if len(ts) > 19:
+            ts = ts[11:19]  # HH:MM:SS
+
+        project = event.get("project_dir", "local")
+        color = _get_project_color(project)
+
+        event_data = event.get("event_data", {})
+        tool_name = event_data.get("tool_name", event.get("event_type", "?"))
+        success = event_data.get("success", True)
+
+        status = "\033[32m+\033[0m" if success else "\033[31mx\033[0m"
+
+        # Build context hint
+        ctx = event_data.get("context", {})
+        category = ctx.get("category", "")
+        tags = ctx.get("tags", [])
+        hint = ""
+        if tags:
+            hint = f" {dim}[{', '.join(tags[:2])}]{reset}"
+        elif category:
+            hint = f" {dim}[{category}]{reset}"
+
+        proj_tag = f"{color}[{project:>12s}]{reset}"
+        return (
+            f"  {dim}{ts}{reset} {proj_tag}"
+            f" {status} {bold}{tool_name}{reset}{hint}"
+        )
+
+    # Determine which log directory to read
+    if project_only:
+        config = get_config()
+        log_dir = get_data_dir(config) / "logs"
+        source_label = f"project: {current_project}"
+    else:
+        log_dir = get_global_data_dir() / "logs"
+        source_label = "global (all projects)"
+
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = log_dir / f"log_{today}.jsonl"
+
+    if not log_file.exists():
+        # Try project-local as fallback
+        if not project_only:
+            config = get_config()
+            local_log = get_data_dir(config) / "logs" / f"log_{today}.jsonl"
+            if local_log.exists():
+                log_file = local_log
+                source_label = f"project: {current_project} (no global log)"
+            else:
+                click.echo(f"\n  No events found today.")
+                click.echo(f"  Checked: {log_dir / f'log_{today}.jsonl'}")
+                click.echo(f"  Events are logged when Claude Code tools are used.\n")
+                return
+        else:
+            click.echo(f"\n  No events found today for this project.\n")
+            return
+
+    click.echo(f"\n{bold}--- ESASS Event Stream ({source_label}) ---{reset}\n")
+
+    # Read and display
+    events = []
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if project_only:
+                        proj = event.get("project_dir", current_project)
+                        if proj != current_project:
+                            continue
+                    events.append(event)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+    except Exception as e:
+        click.echo(f"  Error reading log: {e}")
+        return
+
+    recent = events[-lines:]
+    for event in recent:
+        click.echo(_format_event(event))
+
+    click.echo(f"\n  {dim}Showing {len(recent)} of {len(events)} events{reset}")
+
+    if not follow:
+        click.echo()
+        return
+
+    click.echo(f"\n{dim}--- Following (Ctrl+C to stop) ---{reset}\n")
+
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            f.seek(0, 2)
+            while True:
+                line = f.readline()
+                if line:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        if project_only:
+                            proj = event.get("project_dir", current_project)
+                            if proj != current_project:
+                                continue
+                        click.echo(_format_event(event))
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                else:
+                    _time.sleep(0.3)
+    except KeyboardInterrupt:
+        click.echo(f"\n{dim}--- Stopped ---{reset}")
 
 
 @esass.command("setup")
