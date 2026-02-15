@@ -28,7 +28,7 @@ Executes ESASS skills using a 3-tier local-first approach for maximum cost savin
 
 ## Tier Hierarchy
 
-1. **Tier 1: Local (Ollama/FunctionGemma)** - Primary, ~$0 cost
+1. **Tier 1: Local (Ollama/Gemma3:12b)** - Primary, ~$0 cost
    - Fast inference on local GPU
    - Suitable for: skill execution, code generation, file operations
 
@@ -47,7 +47,7 @@ Executes ESASS skills using a 3-tier local-first approach for maximum cost savin
 winget install ollama.ollama
 
 # Pull FunctionGemma model
-ollama pull functiongemma
+ollama pull gemma3:12b
 
 # Start Ollama server
 ollama serve
@@ -61,13 +61,14 @@ export HF_TOKEN="your_huggingface_token"
 
 # Optional configuration
 export OLLAMA_ENDPOINT="http://localhost:11434"
-export OLLAMA_MODEL="functiongemma"
+export OLLAMA_MODEL="gemma3:12b"
 export LOCAL_LLM_ENABLED="true"
 ```
 
 ## MCP Tools Provided
 
 ### execute_skill
+
 Execute an ESASS skill with automatic tier routing.
 
 ```json
@@ -80,6 +81,7 @@ Execute an ESASS skill with automatic tier routing.
 ```
 
 ### analyze_pattern
+
 Analyze a tool usage pattern for semantic clustering.
 
 ```json
@@ -91,6 +93,7 @@ Analyze a tool usage pattern for semantic clustering.
 ```
 
 ### generate_skill_name
+
 Generate a semantic skill name from a pattern.
 
 ```json
@@ -103,6 +106,7 @@ Generate a semantic skill name from a pattern.
 ## Routing Logic
 
 Skills are routed based on:
+
 1. **Capability scores** - file_operations (0.95), security (0.1)
 2. **Token estimates** - >2048 tokens routes to HuggingFace
 3. **Availability** - Automatic fallback if tier unavailable

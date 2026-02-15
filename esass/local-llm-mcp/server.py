@@ -9,7 +9,7 @@ Enhanced with:
 - Model warmup on startup
 
 Tier hierarchy:
-1. Local (Ollama/gemma3:4b) - Primary, free
+1. Local (Ollama/gemma3:12b) - Primary, free
 2. HuggingFace Inference API - Fallback, cheap
 3. Claude - Passthrough for complex tasks
 """
@@ -179,13 +179,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     # Rate limiting (skip for status queries)
     if name not in ("check_availability", "get_routing_stats", "get_adaptive_status"):
         if not _rate_limiter.acquire():
-            return [TextContent(
-                type="text",
-                text=json.dumps({
-                    "error": "Rate limit exceeded. Please wait before making more requests.",
-                    "rate_limit": _rate_limiter.get_status(),
-                })
-            )]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "error": "Rate limit exceeded. Please wait before making more requests.",
+                            "rate_limit": _rate_limiter.get_status(),
+                        }
+                    ),
+                )
+            ]
 
     try:
         if name == "execute_skill":
@@ -234,10 +238,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({
-            "error": str(e),
-            "error_type": type(e).__name__,
-        }))]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                ),
+            )
+        ]
 
 
 async def _execute_skill(
@@ -287,7 +298,8 @@ async def _execute_skill(
 
     # Execute with cost tracking and adaptive learning
     result = await router.execute_with_fallback(
-        routing, executor,
+        routing,
+        executor,
         skill_name=skill_name,
         capabilities=capabilities,
     )
@@ -491,7 +503,9 @@ async def warmup_models() -> None:
 async def main():
     """Run the MCP server."""
     logger.info("Starting local-llm-mcp server...")
-    logger.info(f"Config: ollama={get_config().ollama_endpoint}, model={get_config().ollama_model}")
+    logger.info(
+        f"Config: ollama={get_config().ollama_endpoint}, model={get_config().ollama_model}"
+    )
 
     # Check initial availability
     router = await get_router()
