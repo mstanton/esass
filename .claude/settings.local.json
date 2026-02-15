@@ -55,7 +55,10 @@
       "mcp__local-llm-mcp__get_full_analytics",
       "mcp__claude_ai_Hugging_Face__hf_doc_search",
       "mcp__claude_ai_Hugging_Face__hf_doc_fetch",
-      "Skill(esass)"
+      "Skill(esass)",
+      "Bash(echo:*)",
+      "Bash(export PATH:*)",
+      "Bash(tr:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

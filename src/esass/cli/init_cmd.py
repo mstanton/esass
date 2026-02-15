@@ -174,6 +174,96 @@ def _create_claude_command(project_dir: Path):
     _echo_step(f"Created {cmd_file.relative_to(project_dir)}")
 
 
+def _configure_path():
+    """Ensure the Python scripts directory is on the user's PATH."""
+    if sys.platform == "win32":
+        scripts_dir = Path(sys.executable).parent / "Scripts"
+    else:
+        scripts_dir = Path(sys.executable).parent
+
+    scripts_str = str(scripts_dir)
+
+    # Check if already on PATH (case-insensitive on Windows)
+    current_path = os.environ.get("PATH", "")
+    if sys.platform == "win32":
+        path_entries = [p.lower() for p in current_path.split(";")]
+        already_on_path = scripts_str.lower() in path_entries
+    else:
+        path_entries = current_path.split(":")
+        already_on_path = scripts_str in path_entries
+
+    if already_on_path:
+        _echo_step("Scripts directory already on PATH", ok=False)
+        return
+
+    if sys.platform == "win32":
+        _configure_path_windows(scripts_str)
+    else:
+        _configure_path_unix(scripts_str)
+
+
+def _configure_path_windows(scripts_dir: str):
+    """Add scripts_dir to the user PATH via the Windows registry."""
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_ALL_ACCESS
+        )
+        try:
+            user_path, _ = winreg.QueryValueEx(key, "PATH")
+        except FileNotFoundError:
+            user_path = ""
+
+        # Check again against the registry value (may differ from env)
+        entries = [p.lower() for p in user_path.split(";") if p]
+        if scripts_dir.lower() in entries:
+            _echo_step("Scripts directory already on user PATH", ok=False)
+            winreg.CloseKey(key)
+            return
+
+        new_path = f"{user_path};{scripts_dir}" if user_path else scripts_dir
+        winreg.SetValueEx(key, "PATH", 0, winreg.REG_EXPAND_SZ, new_path)
+        winreg.CloseKey(key)
+
+        _echo_step(f"Added {scripts_dir} to user PATH (restart terminal to apply)")
+    except OSError as exc:
+        _echo_step(f"Could not update PATH: {exc}", ok=False)
+
+
+def _configure_path_unix(scripts_dir: str):
+    """Append an export line to the user's shell profile."""
+    shell = os.environ.get("SHELL", "")
+    export_line = f'export PATH="$PATH:{scripts_dir}"  # Added by esass init'
+
+    if shell.endswith("zsh"):
+        profile = Path.home() / ".zshrc"
+    elif shell.endswith("fish"):
+        profile = Path.home() / ".config" / "fish" / "config.fish"
+        export_line = f"set -gx PATH $PATH {scripts_dir}  # Added by esass init"
+    else:
+        # Default to bash
+        bashrc = Path.home() / ".bashrc"
+        profile = bashrc if bashrc.exists() else Path.home() / ".bash_profile"
+
+    # Don't duplicate if already present
+    if profile.exists():
+        content = profile.read_text()
+        if scripts_dir in content:
+            _echo_step(f"Scripts directory already in {profile.name}", ok=False)
+            return
+    else:
+        content = ""
+
+    if not content.endswith("\n") and content:
+        content += "\n"
+    content += f"\n{export_line}\n"
+
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(content)
+    _echo_step(f"Added {scripts_dir} to {profile.name} (restart terminal to apply)")
+
+
 def _configure_mcp(project_dir: Path, ollama_model: str = "gemma3:4b"):
     """Add esass-mcp-server to .mcp.json with env vars from global config."""
     from esass.config import load_global_mcp_env
@@ -266,6 +356,9 @@ def _quick_init(project_dir: Path, ollama_model: str):
     # Create .claude/settings.local.json with permissions
     _create_claude_settings(project_dir)
 
+    # Ensure scripts directory is on PATH
+    _configure_path()
+
     click.echo(
         click.style("  ESASS ready!", fg="green", bold=True)
         + f" ({project_dir.name})"
@@ -344,7 +437,10 @@ def init(global_install, enable_mcp, ollama_model, yes, quick):
     # 5. Create Claude Code command
     _create_claude_command(project_dir)
 
-    # 6. Optionally configure MCP
+    # 6. Ensure scripts directory is on PATH
+    _configure_path()
+
+    # 7. Optionally configure MCP
     if enable_mcp:
         _configure_mcp(project_dir, ollama_model)
 
