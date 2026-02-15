@@ -23,11 +23,11 @@ class LocalLLMConfig:
 
     # Ollama settings (Tier 1)
     ollama_endpoint: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:4b"  # More capable than functiongemma for general tasks
+    ollama_model: str = "gemma3:12b"  # More capable than functiongemma for general tasks
     ollama_timeout_seconds: int = 60
 
     # HuggingFace settings (Tier 2)
-    hf_model: str = "mistralai/Mistral-7B-Instruct-v0.3"
+    hf_model: str = "Qwen/Qwen2.5-7B-Instruct"
     hf_token: str = field(default_factory=lambda: os.environ.get("HF_TOKEN", ""))
     hf_timeout_seconds: int = 60
 
@@ -77,9 +77,9 @@ class LocalLLMConfig:
             enabled=os.environ.get("LOCAL_LLM_ENABLED", "true").lower() == "true",
             debug=os.environ.get("LOCAL_LLM_DEBUG", "false").lower() == "true",
             ollama_endpoint=os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434"),
-            ollama_model=os.environ.get("OLLAMA_MODEL", "gemma3:4b"),
+            ollama_model=os.environ.get("OLLAMA_MODEL", "gemma3:12b"),
             ollama_timeout_seconds=int(os.environ.get("OLLAMA_TIMEOUT", "30")),
-            hf_model=os.environ.get("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3"),
+            hf_model=os.environ.get("HF_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
             hf_token=os.environ.get("HF_TOKEN", ""),
             hf_timeout_seconds=int(os.environ.get("HF_TIMEOUT", "60")),
             enable_pattern_analysis=os.environ.get("ENABLE_PATTERN_ANALYSIS", "true").lower() == "true",

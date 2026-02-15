@@ -498,6 +498,99 @@ def tail(n):
     click.echo()
 
 
+@esass.command("logs")
+@click.option("-n", "--lines", default=50, help="Number of lines to show initially")
+@click.option("-f", "--follow", is_flag=True, default=False, help="Follow log output in real-time")
+@click.option("--level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]), default=None, help="Filter by minimum log level")
+def logs(lines, follow, level):
+    """View MCP server logs.
+
+    Shows the local LLM MCP server log file. Use -f to follow in real-time.
+
+    Examples:
+        esass logs              # Last 50 lines
+        esass logs -f           # Follow in real-time
+        esass logs -n 100       # Last 100 lines
+        esass logs --level ERROR  # Only errors
+    """
+    import time as _time
+
+    config = get_config()
+    data_dir = get_data_dir(config)
+    log_file = data_dir / "logs" / "mcp_server.log"
+
+    if not log_file.exists():
+        click.echo(f"No MCP log file found at: {log_file}")
+        click.echo("The MCP server writes logs here when running.")
+        click.echo("Start it via Claude Code with the local-llm-mcp server configured.")
+        return
+
+    # Color map for log levels
+    colors = {
+        "DEBUG": "\033[90m",     # gray
+        "INFO": "\033[36m",      # cyan
+        "WARNING": "\033[33m",   # yellow
+        "ERROR": "\033[31m",     # red
+        "CRITICAL": "\033[1;31m",  # bold red
+    }
+    reset = "\033[0m"
+
+    level_priority = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+    min_level = level_priority.get(level, 0) if level else 0
+
+    def _colorize(line: str) -> str:
+        for lvl, color in colors.items():
+            if f"[{lvl}]" in line:
+                return f"{color}{line.rstrip()}{reset}"
+        return line.rstrip()
+
+    def _passes_filter(line: str) -> bool:
+        if min_level == 0:
+            return True
+        for lvl, priority in level_priority.items():
+            if f"[{lvl}]" in line and priority >= min_level:
+                return True
+        return False
+
+    # Read and display last N lines
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+    except Exception as e:
+        click.echo(f"Error reading log file: {e}")
+        return
+
+    filtered = [l for l in all_lines if _passes_filter(l)]
+    recent = filtered[-lines:]
+
+    click.echo(f"\033[1m--- MCP Server Logs: {log_file} ---\033[0m")
+    if level:
+        click.echo(f"\033[90mFiltering: {level}+\033[0m")
+    click.echo()
+
+    for line in recent:
+        click.echo(_colorize(line))
+
+    if not follow:
+        return
+
+    # Follow mode - tail the file
+    click.echo(f"\n\033[90m--- Following (Ctrl+C to stop) ---\033[0m\n")
+
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(0, 2)  # end of file
+            while True:
+                line = f.readline()
+                if line:
+                    if _passes_filter(line):
+                        click.echo(_colorize(line))
+                else:
+                    _time.sleep(0.2)
+    except KeyboardInterrupt:
+        click.echo(f"\n\033[90m--- Stopped ---\033[0m")
+
+
 @esass.command("setup")
 def setup():
     """Show setup instructions (use 'esass init' for automated setup)."""

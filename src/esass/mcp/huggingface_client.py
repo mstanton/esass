@@ -1,4 +1,6 @@
-"""HuggingFace Inference API client for Tier 2 fallback.
+"""HuggingFace Inference Providers client for Tier 2 fallback.
+
+Uses the OpenAI-compatible chat completions API at router.huggingface.co/v1.
 
 Enhanced with:
 - Connection pooling with limits
@@ -52,7 +54,10 @@ class HuggingFaceResponse:
 
 
 class HuggingFaceClient:
-    """Client for HuggingFace Inference API (Tier 2 fallback).
+    """Client for HuggingFace Inference Providers (Tier 2 fallback).
+
+    Uses the OpenAI-compatible chat completions endpoint at
+    https://router.huggingface.co/v1/chat/completions
 
     Features:
     - Connection pooling with configurable limits
@@ -61,7 +66,7 @@ class HuggingFaceClient:
     - Proper error classification (rate limits, model loading, etc.)
     """
 
-    INFERENCE_API_URL = "https://api-inference.huggingface.co/models"
+    BASE_URL = "https://router.huggingface.co/v1"
 
     def __init__(
         self,
@@ -89,11 +94,11 @@ class HuggingFaceClient:
             CircuitBreakerConfig(
                 failure_threshold=5,
                 success_threshold=2,
-                timeout_seconds=60.0,  # Longer timeout for cloud service
+                timeout_seconds=60.0,
             )
         )
 
-        # Retry configuration - include rate limit errors
+        # Retry configuration
         self._retry_config = RetryConfig(
             max_attempts=3,
             base_delay_seconds=2.0,
@@ -109,7 +114,7 @@ class HuggingFaceClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client with connection pooling."""
         if self._client is None:
-            headers = {}
+            headers = {"Content-Type": "application/json"}
             if self.token:
                 headers["Authorization"] = f"Bearer {self.token}"
 
@@ -139,20 +144,25 @@ class HuggingFaceClient:
 
         try:
             client = await self._get_client()
-            response = await client.get(
-                f"{self.INFERENCE_API_URL}/{self.model}",
-                params={"wait_for_model": "false"},
-                timeout=10.0,
+            # Use a minimal chat completion as a health check
+            response = await client.post(
+                f"{self.BASE_URL}/chat/completions",
+                json={
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 1,
+                },
+                timeout=15.0,
             )
 
             if response.status_code == 200:
                 self._is_healthy = True
                 return True
             elif response.status_code == 503:
-                # Model loading - technically available but slow
                 self._is_healthy = True
                 return True
             else:
+                logger.debug(f"HuggingFace health check: HTTP {response.status_code} - {response.text[:200]}")
                 self._is_healthy = False
                 return False
 
@@ -183,11 +193,11 @@ class HuggingFaceClient:
         max_new_tokens: int = 512,
         temperature: float = 0.7,
     ) -> HuggingFaceResponse:
-        """Generate a response using HuggingFace Inference API.
+        """Generate a response using HuggingFace chat completions API.
 
         Args:
             prompt: The user prompt
-            system: Optional system message (prepended to prompt)
+            system: Optional system message
             max_new_tokens: Maximum tokens to generate
             temperature: Sampling temperature
 
@@ -198,7 +208,6 @@ class HuggingFaceClient:
             RuntimeError: If circuit is open
             HuggingFaceError: On API errors
         """
-        # Check circuit breaker
         if not self._circuit.can_execute():
             raise RuntimeError(
                 "Circuit breaker open for HuggingFace - service appears unavailable"
@@ -207,27 +216,22 @@ class HuggingFaceClient:
         async def _do_generate() -> HuggingFaceResponse:
             client = await self._get_client()
 
-            # Format prompt for instruction-following models
-            full_prompt = prompt
+            messages = []
             if system:
-                full_prompt = f"[INST] {system}\n\n{prompt} [/INST]"
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
 
             payload = {
-                "inputs": full_prompt,
-                "parameters": {
-                    "max_new_tokens": max_new_tokens,
-                    "temperature": temperature,
-                    "return_full_text": False,
-                },
-                "options": {
-                    "wait_for_model": True,  # Wait if model is loading
-                },
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": max_new_tokens,
+                "temperature": temperature,
             }
 
             logger.debug(f"HuggingFace request to {self.model}")
 
             response = await client.post(
-                f"{self.INFERENCE_API_URL}/{self.model}",
+                f"{self.BASE_URL}/chat/completions",
                 json=payload,
             )
 
@@ -235,17 +239,20 @@ class HuggingFaceClient:
 
             data = response.json()
 
-            # Handle different response formats
-            if isinstance(data, list) and len(data) > 0:
-                content = data[0].get("generated_text", "")
-            elif isinstance(data, dict):
-                content = data.get("generated_text", str(data))
-            else:
-                content = str(data)
+            # Extract content from OpenAI-compatible response
+            content = ""
+            usage = None
+            if "choices" in data and len(data["choices"]) > 0:
+                content = data["choices"][0].get("message", {}).get("content", "")
+            if "usage" in data:
+                usage = data["usage"]
+
+            model_used = data.get("model", self.model)
 
             return HuggingFaceResponse(
                 content=content,
-                model=self.model,
+                model=model_used,
+                usage=usage,
             )
 
         try:
@@ -254,7 +261,6 @@ class HuggingFaceClient:
             return result
 
         except HuggingFaceRateLimitError:
-            # Don't count rate limits against circuit breaker
             raise
 
         except Exception as e:
@@ -267,16 +273,7 @@ class HuggingFaceClient:
         skill_description: str,
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Execute a skill using HuggingFace model (Tier 2 fallback).
-
-        Args:
-            skill_name: Name of the skill to execute
-            skill_description: Description/implementation summary
-            context: Execution context
-
-        Returns:
-            Dict with execution result
-        """
+        """Execute a skill using HuggingFace model (Tier 2 fallback)."""
         system_prompt = """You are a skill executor. Analyze the skill and context,
 then return a JSON response with execution plan.
 
@@ -305,7 +302,6 @@ Return JSON execution plan."""
 
             result = extract_json(response.content)
 
-            # Ensure required fields
             if "success" not in result:
                 result["success"] = "error" not in result
 
@@ -329,15 +325,7 @@ Return JSON execution plan."""
         pattern_sequence: str,
         tags: List[str],
     ) -> str:
-        """Generate a semantic skill name (Tier 2 fallback).
-
-        Args:
-            pattern_sequence: Tool sequence pattern
-            tags: Associated tags
-
-        Returns:
-            Semantic skill name
-        """
+        """Generate a semantic skill name (Tier 2 fallback)."""
         prompt = f"""Generate a concise skill name for this pattern:
 
 Pattern: {pattern_sequence}
@@ -364,16 +352,7 @@ Reply with ONLY the skill name."""
         support: int,
         confidence: float,
     ) -> Dict[str, Any]:
-        """Analyze a pattern semantically (Tier 2 fallback).
-
-        Args:
-            pattern_sequence: The tool sequence pattern
-            support: Occurrence count
-            confidence: Confidence score
-
-        Returns:
-            Pattern analysis
-        """
+        """Analyze a pattern semantically (Tier 2 fallback)."""
         prompt = f"""Analyze this tool pattern and return JSON:
 
 Pattern: {pattern_sequence}
@@ -397,7 +376,6 @@ JSON format:
 
             analysis = extract_json(response.content)
 
-            # Ensure required fields
             if "category" not in analysis:
                 analysis["category"] = "unknown"
             if "is_meaningful" not in analysis:

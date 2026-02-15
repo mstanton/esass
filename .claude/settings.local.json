@@ -52,7 +52,9 @@
       "Bash(uv pip install:*)",
       "Bash(1:*)",
       "mcp__local-llm-mcp__get_adaptive_status",
-      "mcp__local-llm-mcp__get_full_analytics"
+      "mcp__local-llm-mcp__get_full_analytics",
+      "mcp__claude_ai_Hugging_Face__hf_doc_search",
+      "mcp__claude_ai_Hugging_Face__hf_doc_fetch"
     ]
   },
   "enableAllProjectMcpServers": true,

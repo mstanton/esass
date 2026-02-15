@@ -17,8 +17,11 @@ Tier hierarchy:
 import asyncio
 import json
 import logging
+import logging.handlers
+import os
 import time
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
 from mcp.server import Server
@@ -33,13 +36,47 @@ from esass.mcp.utils import validate_skill_request, RateLimiter
 from esass.mcp.event_logger import get_event_logger
 from esass.mcp.status_writer import MCPStatusWriter
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stderr)],
-)
-logger = logging.getLogger("local-llm-mcp")
+
+def _setup_logging() -> logging.Logger:
+    """Configure logging with stderr + rotating file handler."""
+    config = get_config()
+    level = logging.DEBUG if config.debug else logging.INFO
+
+    # Root MCP logger
+    root_logger = logging.getLogger("local-llm-mcp")
+    root_logger.setLevel(level)
+
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    # stderr handler (captured by MCP stdio, but useful for crashes)
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(fmt)
+    root_logger.addHandler(stderr_handler)
+
+    # File handler - write to a known location for tailing
+    log_dir = Path(
+        os.environ.get("ESASS_DATA_DIR", str(Path.home() / ".esass" / "data"))
+    ) / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "mcp_server.log"
+
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    file_handler.setFormatter(fmt)
+    file_handler.setLevel(logging.DEBUG)  # Always capture everything to file
+    root_logger.addHandler(file_handler)
+
+    # Also attach to esass.mcp.* loggers so client modules log to file too
+    mcp_parent = logging.getLogger("esass.mcp")
+    mcp_parent.setLevel(level)
+    mcp_parent.addHandler(file_handler)
+
+    root_logger.info(f"Logging initialized: level={logging.getLevelName(level)}, file={log_file}")
+    return root_logger
+
+
+logger = _setup_logging()
 
 # Create MCP server
 server = Server("local-llm-mcp")
