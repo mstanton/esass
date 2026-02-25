@@ -25,5 +25,9 @@
       "Bash(git status:*)",
       "Bash(grep:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "local-llm-mcp"
+  ],
+  "enableAllProjectMcpServers": true
 }

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LocalLLMConfig:
     """Configuration for local LLM integration."""
+
     enabled: bool = True
     ollama_endpoint: str = "http://localhost:11434"
     ollama_model: str = "functiongemma"
@@ -44,14 +45,17 @@ class LocalLLMClient:
         )
         self._client: httpx.AsyncClient | None = None
         self._available: bool | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
-        if self._client is None:
+        current_loop = asyncio.get_running_loop()
+        if self._client is None or self._client.is_closed or self._loop != current_loop:
             self._client = httpx.AsyncClient(
                 base_url=self.config.ollama_endpoint,
                 timeout=httpx.Timeout(self.config.timeout_seconds),
             )
+            self._loop = current_loop
         return self._client
 
     async def close(self) -> None:
@@ -104,7 +108,7 @@ class LocalLLMClient:
             "stream": False,
             "options": {
                 "num_predict": max_tokens,
-            }
+            },
         }
 
         response = await client.post("/api/chat", json=payload)
@@ -139,7 +143,7 @@ class LocalLLMClient:
         prompt = f"""Generate a concise, semantic skill name for this pattern:
 
 Pattern: {sequence_str}
-Tags: {', '.join(tags[:5])}
+Tags: {", ".join(tags[:5])}
 
 Requirements:
 - Use snake_case
@@ -154,7 +158,7 @@ Respond with ONLY the skill name, nothing else."""
             name = response.strip().lower()
 
             # Clean up response - remove quotes, extra text
-            name = name.replace('"', '').replace("'", "")
+            name = name.replace('"', "").replace("'", "")
             name = name.split()[0] if name else ""  # Take first word
             name = name.split("\n")[0]  # Take first line
 
@@ -172,7 +176,13 @@ Respond with ONLY the skill name, nothing else."""
                 name = f"{name}_skill" if name else self._fallback_name(tags)
 
             # Validate name
-            invalid_names = {"_skill", "skill", "pattern_skill", "workflow_skill", "the_skill"}
+            invalid_names = {
+                "_skill",
+                "skill",
+                "pattern_skill",
+                "workflow_skill",
+                "the_skill",
+            }
             if len(name) < 10 or name in invalid_names or name.startswith("_"):
                 return self._fallback_name(tags)
 
@@ -241,9 +251,58 @@ Return ONLY the JSON, no other text."""
 
         return self._fallback_analysis(pattern_description, sequence)
 
+    async def infer_capabilities(
+        self,
+        pattern_description: str,
+        sequence: List[str],
+        tags: List[str],
+    ) -> List[str]:
+        """
+        Infer skill capabilities using local LLM.
+
+        Args:
+            pattern_description: Description
+            sequence: Tool sequence
+            tags: Pattern tags
+
+        Returns:
+            List of capability strings
+        """
+        if not await self.is_available():
+            return []
+
+        prompt = f"""Infer a list of capabilities for this skill pattern:
+
+Pattern: {" -> ".join(sequence)}
+Description: {pattern_description}
+Tags: {", ".join(tags)}
+
+Potential capabilities: file_operations, git_operations, testing, debugging, search, configuration, documentation, problem_analysis, tool_orchestration, web_exploration.
+
+Return ONLY a comma-separated list of the most relevant 2-4 capabilities from the list above, or others if more appropriate.
+
+Respond with ONLY the list, nothing else."""
+
+        try:
+            response = await self._generate(prompt, max_tokens=100)
+            capabilities = [c.strip().lower() for c in response.split(",")]
+            # Clean and filter
+            cleaned = []
+            for cap in capabilities:
+                # Remove non-alpha
+                cap = "".join(c for c in cap if c.isalpha() or c == "_")
+                if cap:
+                    cleaned.append(cap)
+            return cleaned
+        except Exception as e:
+            logger.warning(f"Local LLM capability inference failed: {e}")
+            return []
+
     async def cluster_patterns_semantically(
         self,
-        patterns: List[Tuple[str, List[str], List[str]]],  # (description, sequence, tags)
+        patterns: List[
+            Tuple[str, List[str], List[str]]
+        ],  # (description, sequence, tags)
     ) -> List[List[int]]:
         """
         Cluster similar patterns together using semantic analysis.
@@ -296,8 +355,11 @@ Return ONLY the JSON array, no other text."""
                 for cluster in clusters:
                     if isinstance(cluster, list):
                         valid_indices = [
-                            i for i in cluster
-                            if isinstance(i, int) and 0 <= i < len(patterns) and i not in seen
+                            i
+                            for i in cluster
+                            if isinstance(i, int)
+                            and 0 <= i < len(patterns)
+                            and i not in seen
                         ]
                         if valid_indices:
                             valid_clusters.append(valid_indices)
@@ -379,18 +441,27 @@ def generate_skill_name_sync(
     sequence: List[str] | None = None,
 ) -> str:
     """Synchronous wrapper for skill name generation."""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
 
     async def _generate():
         client = await get_local_llm_client()
         return await client.generate_skill_name(pattern_description, tags, sequence)
 
     try:
-        return loop.run_until_complete(_generate())
+        # Try to get the existing loop
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # We are in an async context - this wrapper shouldn't be used here
+                # but if it is, we can't run_until_complete.
+                # Since we are sync, we have no choice but to try running it
+                # or return fallback if we can't.
+                logger.warning(
+                    "generate_skill_name_sync called from running event loop"
+                )
+                return "pattern_workflow_skill"
+        except RuntimeError:
+            # No loop running, safe to use asyncio.run
+            return asyncio.run(_generate())
     except Exception as e:
         logger.warning(f"Sync skill name generation failed: {e}")
         # Fallback
@@ -399,3 +470,27 @@ def generate_skill_name_sync(
         elif len(tags) == 1:
             return f"{tags[0]}_workflow_skill"
         return "pattern_workflow_skill"
+
+
+def infer_capabilities_sync(
+    pattern_description: str,
+    sequence: List[str],
+    tags: List[str],
+) -> List[str]:
+    """Synchronous wrapper for capability inference."""
+
+    async def _infer():
+        client = await get_local_llm_client()
+        return await client.infer_capabilities(pattern_description, sequence, tags)
+
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                logger.warning("infer_capabilities_sync called from running event loop")
+                return []
+        except RuntimeError:
+            return asyncio.run(_infer())
+    except Exception as e:
+        logger.warning(f"Sync capability inference failed: {e}")
+        return []

@@ -19,6 +19,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from esass.config import load_config
 from esass.models import LogEntry, PatternDefinition, PatternType
 
 logger = logging.getLogger(__name__)
@@ -31,60 +32,15 @@ class SemanticTagExtractor:
     Transforms nested data into flat, queryable tag sets for pattern mining.
     """
 
-    # Known tool categories for semantic grouping
-    TOOL_CATEGORIES = {
-        'Read': 'file_read',
-        'Write': 'file_write',
-        'Edit': 'file_edit',
-        'Glob': 'file_search',
-        'Grep': 'content_search',
-        'Bash': 'command',
-        'Task': 'delegation',
-        'WebFetch': 'web',
-        'WebSearch': 'web',
-        'AskUserQuestion': 'interaction',
-    }
+    def __init__(self, config=None):
+        """Initialize with configuration."""
+        self.config = config or load_config().semantic_extraction
+        self.tool_categories = self.config.tool_categories
+        self.file_type_semantics = self.config.file_type_semantics
+        self.command_patterns = self.config.command_patterns
+        self.noise_tags = {t.lower() for t in self.config.noise_tags}
 
-    # Tags to filter out (noise from hook execution)
-    NOISE_TAGS = {
-        'boundary_action', 'hook_error', 'hook_success',
-        'unknown', 'none', 'null', ''
-    }
-
-    # File type semantic mappings
-    FILE_TYPE_SEMANTICS = {
-        '.py': 'python',
-        '.js': 'javascript',
-        '.ts': 'typescript',
-        '.json': 'config',
-        '.yaml': 'config',
-        '.yml': 'config',
-        '.md': 'docs',
-        '.txt': 'text',
-        '.sh': 'script',
-        '.ps1': 'script',
-    }
-
-    # Command pattern recognition
-    COMMAND_PATTERNS = {
-        r'git\s+status': 'git_status',
-        r'git\s+add': 'git_add',
-        r'git\s+commit': 'git_commit',
-        r'git\s+push': 'git_push',
-        r'git\s+pull': 'git_pull',
-        r'git\s+diff': 'git_diff',
-        r'git\s+log': 'git_log',
-        r'pytest|python\s+-m\s+pytest': 'test_run',
-        r'npm\s+test|yarn\s+test': 'test_run',
-        r'pip\s+install': 'dependency',
-        r'npm\s+install|yarn\s+add': 'dependency',
-        r'python|node|ruby': 'execution',
-        r'docker': 'container',
-        r'kubectl': 'kubernetes',
-    }
-
-    @classmethod
-    def extract_tags(cls, entry: LogEntry) -> List[str]:
+    def extract_tags(self, entry: LogEntry) -> List[str]:
         """
         Extract all semantic tags from a log entry.
 
@@ -102,110 +58,108 @@ class SemanticTagExtractor:
             tags.update(entry.tags)
 
         # 2. Extract tool name (primary semantic key)
-        tool_name = event_data.get('tool_name')
+        tool_name = event_data.get("tool_name")
         if tool_name:
             tags.add(tool_name)
             # Add category tag
-            if tool_name in cls.TOOL_CATEGORIES:
-                tags.add(cls.TOOL_CATEGORIES[tool_name])
+            if tool_name in self.tool_categories:
+                tags.add(self.tool_categories[tool_name])
 
         # 3. Extract from nested context structure
-        context = event_data.get('context', {})
+        context = event_data.get("context", {})
         if isinstance(context, dict):
             # Category (file_operation, search, command, etc.)
-            if context.get('category'):
-                tags.add(context['category'])
+            if context.get("category"):
+                tags.add(context["category"])
 
             # Action (read, edit, search, etc.)
-            if context.get('action'):
-                tags.add(context['action'])
+            if context.get("action"):
+                tags.add(context["action"])
 
             # Context-level tags
-            if context.get('tags'):
-                for tag in context['tags']:
+            if context.get("tags"):
+                for tag in context["tags"]:
                     # Parse filetype tags: "filetype:.py" → "python"
-                    if tag.startswith('filetype:'):
-                        ext = tag.split(':', 1)[1]
-                        if ext in cls.FILE_TYPE_SEMANTICS:
-                            tags.add(cls.FILE_TYPE_SEMANTICS[ext])
+                    if tag.startswith("filetype:"):
+                        ext = tag.split(":", 1)[1]
+                        if ext in self.file_type_semantics:
+                            tags.add(self.file_type_semantics[ext])
                         else:
-                            tags.add(ext.lstrip('.'))
+                            tags.add(ext.lstrip("."))
                     else:
                         tags.add(tag)
 
         # 4. Extract from parameters
-        params = event_data.get('parameters', {})
+        params = event_data.get("parameters", {})
         if isinstance(params, dict):
-            cls._extract_from_parameters(params, tags, tool_name)
+            self._extract_from_parameters(params, tags, tool_name)
 
         # 5. Extract from command (for Bash events)
-        command = params.get('command', '') if isinstance(params, dict) else ''
+        command = params.get("command", "") if isinstance(params, dict) else ""
         if command:
-            cls._extract_from_command(command, tags)
+            self._extract_from_command(command, tags)
 
         # 6. Event type augmentation
         event_type = entry.event_type
-        if event_type and event_type not in ['tool_call', 'tool_usage']:
+        if event_type and event_type not in ["tool_call", "tool_usage"]:
             tags.add(event_type)
 
         # 7. Filter out noise tags
-        tags = {t for t in tags if t.lower() not in cls.NOISE_TAGS}
+        tags = {t for t in tags if t.lower() not in self.noise_tags}
 
         return sorted(tags)
 
-    @classmethod
-    def _extract_from_parameters(cls, params: Dict, tags: Set[str],
-                                  tool_name: Optional[str]) -> None:
+    def _extract_from_parameters(
+        self, params: Dict, tags: Set[str], tool_name: Optional[str]
+    ) -> None:
         """Extract semantic tags from tool parameters."""
         # File path analysis
-        file_path = params.get('file_path', '') or params.get('path', '')
+        file_path = params.get("file_path", "") or params.get("path", "")
         if file_path:
             # Extract file extension
-            if '.' in file_path:
-                ext = '.' + file_path.rsplit('.', 1)[-1].lower()
-                if ext in cls.FILE_TYPE_SEMANTICS:
-                    tags.add(cls.FILE_TYPE_SEMANTICS[ext])
+            if "." in file_path:
+                ext = "." + file_path.rsplit(".", 1)[-1].lower()
+                if ext in self.file_type_semantics:
+                    tags.add(self.file_type_semantics[ext])
 
             # Detect special directories
             path_lower = file_path.lower()
-            if 'test' in path_lower:
-                tags.add('testing')
-            if 'src/' in path_lower or '/src/' in path_lower:
-                tags.add('source')
-            if 'config' in path_lower or 'settings' in path_lower:
-                tags.add('config')
+            if "test" in path_lower:
+                tags.add("testing")
+            if "src/" in path_lower or "/src/" in path_lower:
+                tags.add("source")
+            if "config" in path_lower or "settings" in path_lower:
+                tags.add("config")
 
         # Search pattern analysis
-        pattern = params.get('pattern', '')
+        pattern = params.get("pattern", "")
         if pattern:
-            if 'def ' in pattern or 'function' in pattern:
-                tags.add('function_search')
-            if 'class ' in pattern:
-                tags.add('class_search')
-            if 'import' in pattern:
-                tags.add('import_search')
+            if "def " in pattern or "function" in pattern:
+                tags.add("function_search")
+            if "class " in pattern:
+                tags.add("class_search")
+            if "import" in pattern:
+                tags.add("import_search")
 
-    @classmethod
-    def _extract_from_command(cls, command: str, tags: Set[str]) -> None:
+    def _extract_from_command(self, command: str, tags: Set[str]) -> None:
         """Extract semantic tags from bash commands."""
         import re
 
         command_lower = command.lower()
 
-        for pattern, tag in cls.COMMAND_PATTERNS.items():
+        for pattern, tag in self.command_patterns.items():
             if re.search(pattern, command_lower):
                 tags.add(tag)
 
         # General git detection
-        if command_lower.startswith('git '):
-            tags.add('git')
+        if command_lower.startswith("git "):
+            tags.add("git")
 
         # Detect file operations
-        if any(cmd in command_lower for cmd in ['rm ', 'mv ', 'cp ', 'mkdir']):
-            tags.add('file_management')
+        if any(cmd in command_lower for cmd in ["rm ", "mv ", "cp ", "mkdir"]):
+            tags.add("file_management")
 
-    @classmethod
-    def create_event_key(cls, entry: LogEntry, granularity: str = 'medium') -> str:
+    def create_event_key(self, entry: LogEntry, granularity: str = "medium") -> str:
         """
         Create a semantic event key for pattern mining.
 
@@ -219,38 +173,38 @@ class SemanticTagExtractor:
         Returns:
             Event key string for sequence mining
         """
-        tags = cls.extract_tags(entry)
+        tags = self.extract_tags(entry)
         event_data = entry.event_data or {}
-        tool_name = event_data.get('tool_name', entry.event_type)
+        tool_name = event_data.get("tool_name", entry.event_type)
 
         # Skip noise event types entirely
-        if tool_name and tool_name.lower() in cls.NOISE_TAGS:
+        if tool_name and tool_name.lower() in self.noise_tags:
             return None
 
-        if granularity == 'coarse':
+        if granularity == "coarse":
             # Just the category
-            category = cls.TOOL_CATEGORIES.get(tool_name, tool_name)
+            category = self.tool_categories.get(tool_name, tool_name)
             return category
 
-        elif granularity == 'medium':
+        elif granularity == "medium":
             # Tool + primary semantic tag
             primary_tags = []
 
             # Prioritize: filetype > action > category
             for tag in tags:
-                if tag in cls.FILE_TYPE_SEMANTICS.values():
+                if tag in self.file_type_semantics.values():
                     primary_tags.append(tag)
                     break
 
             if not primary_tags:
-                context = event_data.get('context', {})
-                if isinstance(context, dict) and context.get('action'):
-                    primary_tags.append(context['action'])
+                context = event_data.get("context", {})
+                if isinstance(context, dict) and context.get("action"):
+                    primary_tags.append(context["action"])
 
             # For git commands, use git action
-            if 'git' in tags:
+            if "git" in tags:
                 for tag in tags:
-                    if tag.startswith('git_'):
+                    if tag.startswith("git_"):
                         primary_tags = [tag]
                         break
 
@@ -285,8 +239,8 @@ class EnhancedPatternDetector:
         max_gap_seconds: int = 600,
         min_sequence_length: int = 2,
         max_sequence_length: int = 6,
-        granularity: str = 'medium',
-        count_within_session: bool = True
+        granularity: str = "medium",
+        count_within_session: bool = True,
     ):
         """
         Initialize enhanced pattern detector.
@@ -336,8 +290,7 @@ class EnhancedPatternDetector:
 
         # Step 3: Mine frequent subsequences
         frequent_sequences = self._mine_frequent_sequences(
-            sequences,
-            count_within_session=self.count_within_session
+            sequences, count_within_session=self.count_within_session
         )
 
         # Step 4: Create pattern definitions
@@ -361,7 +314,7 @@ class EnhancedPatternDetector:
         """Group log entries by session_id."""
         sessions = defaultdict(list)
         for entry in logs:
-            sid = entry.session_id or 'unknown'
+            sid = entry.session_id or "unknown"
             sessions[sid].append(entry)
         return dict(sessions)
 
@@ -383,7 +336,9 @@ class EnhancedPatternDetector:
         for entry in sorted_session:
             # Check time gap
             try:
-                current_time = datetime.fromisoformat(entry.timestamp.replace('Z', '+00:00'))
+                current_time = datetime.fromisoformat(
+                    entry.timestamp.replace("Z", "+00:00")
+                )
                 if last_time:
                     gap = (current_time - last_time).total_seconds()
                     if gap > self.max_gap_seconds:
@@ -394,9 +349,8 @@ class EnhancedPatternDetector:
                 pass
 
             # Create semantic event key
-            event_key = SemanticTagExtractor.create_event_key(
-                entry,
-                granularity=self.granularity
+            event_key = self.extractor.create_event_key(
+                entry, granularity=self.granularity
             )
             # Skip noise events
             if event_key is not None:
@@ -405,9 +359,7 @@ class EnhancedPatternDetector:
         return sequence
 
     def _mine_frequent_sequences(
-        self,
-        sequences: List[List[str]],
-        count_within_session: bool = True
+        self, sequences: List[List[str]], count_within_session: bool = True
     ) -> Dict[Tuple[str, ...], int]:
         """
         Find subsequences that appear frequently.
@@ -422,18 +374,22 @@ class EnhancedPatternDetector:
         for seq in sequences:
             if count_within_session:
                 # Count all occurrences within session
-                for length in range(self.min_sequence_length,
-                                  min(self.max_sequence_length + 1, len(seq) + 1)):
+                for length in range(
+                    self.min_sequence_length,
+                    min(self.max_sequence_length + 1, len(seq) + 1),
+                ):
                     for i in range(len(seq) - length + 1):
-                        subseq = tuple(seq[i:i+length])
+                        subseq = tuple(seq[i : i + length])
                         subsequence_counts[subseq] += 1
             else:
                 # Only count once per session (original behavior)
                 seen_in_seq = set()
-                for length in range(self.min_sequence_length,
-                                  min(self.max_sequence_length + 1, len(seq) + 1)):
+                for length in range(
+                    self.min_sequence_length,
+                    min(self.max_sequence_length + 1, len(seq) + 1),
+                ):
                     for i in range(len(seq) - length + 1):
-                        subseq = tuple(seq[i:i+length])
+                        subseq = tuple(seq[i : i + length])
                         if subseq not in seen_in_seq:
                             subsequence_counts[subseq] += 1
                             seen_in_seq.add(subseq)
@@ -441,10 +397,7 @@ class EnhancedPatternDetector:
         return dict(subsequence_counts)
 
     def _create_pattern(
-        self,
-        sequence: Tuple[str, ...],
-        support: int,
-        logs: List[LogEntry]
+        self, sequence: Tuple[str, ...], support: int, logs: List[LogEntry]
     ) -> Optional[PatternDefinition]:
         """Create PatternDefinition from enriched sequence."""
         exemplars = self._find_exemplars(sequence, logs, limit=5)
@@ -458,10 +411,10 @@ class EnhancedPatternDetector:
 
         # Determine skill candidacy with relaxed criteria
         skill_candidate = (
-            support >= self.min_support and
-            confidence >= self.min_confidence and
-            stability_days >= self.min_stability_days and
-            self._is_semantically_meaningful(sequence)
+            support >= self.min_support
+            and confidence >= self.min_confidence
+            and stability_days >= self.min_stability_days
+            and self._is_semantically_meaningful(sequence)
         )
 
         tags = self._extract_pattern_tags(sequence)
@@ -478,7 +431,7 @@ class EnhancedPatternDetector:
             skill_candidate=skill_candidate,
             tags=tags,
             first_seen=first_seen,
-            last_seen=last_seen
+            last_seen=last_seen,
         )
 
     def _is_semantically_meaningful(self, sequence: Tuple[str, ...]) -> bool:
@@ -498,12 +451,12 @@ class EnhancedPatternDetector:
             return False
 
         # Reject if items lack semantic tags (just tool names)
-        has_semantic = any(':' in item for item in sequence)
+        has_semantic = any(":" in item for item in sequence)
 
         # Reject generic patterns
-        generic_patterns = {'tool_call', 'tool_usage', 'none'}
+        generic_patterns = {"tool_call", "tool_usage", "none"}
         all_generic = all(
-            item.split(':')[0] in generic_patterns or item in generic_patterns
+            item.split(":")[0] in generic_patterns or item in generic_patterns
             for item in sequence
         )
         if all_generic:
@@ -512,9 +465,7 @@ class EnhancedPatternDetector:
         return True
 
     def _calculate_confidence(
-        self,
-        sequence: Tuple[str, ...],
-        logs: List[LogEntry]
+        self, sequence: Tuple[str, ...], logs: List[LogEntry]
     ) -> float:
         """Calculate P(full sequence | first event)."""
         sessions = self._group_by_session(logs)
@@ -528,8 +479,8 @@ class EnhancedPatternDetector:
 
             if len(seq_tuple) > 0:
                 # Check if starts similarly (same tool or category)
-                first_tool = sequence[0].split(':')[0]
-                seq_first_tool = seq_tuple[0].split(':')[0] if seq_tuple else ''
+                first_tool = sequence[0].split(":")[0]
+                seq_first_tool = seq_tuple[0].split(":")[0] if seq_tuple else ""
 
                 if first_tool == seq_first_tool:
                     sessions_with_first += 1
@@ -542,9 +493,7 @@ class EnhancedPatternDetector:
         return sessions_with_full / sessions_with_first
 
     def _sequence_contains(
-        self,
-        haystack: Tuple[str, ...],
-        needle: Tuple[str, ...]
+        self, haystack: Tuple[str, ...], needle: Tuple[str, ...]
     ) -> bool:
         """Check if needle appears in haystack (flexible matching)."""
         if len(needle) > len(haystack):
@@ -552,15 +501,13 @@ class EnhancedPatternDetector:
 
         # Exact match first
         for i in range(len(haystack) - len(needle) + 1):
-            if haystack[i:i+len(needle)] == needle:
+            if haystack[i : i + len(needle)] == needle:
                 return True
 
         return False
 
     def _calculate_stability(
-        self,
-        sequence: Tuple[str, ...],
-        logs: List[LogEntry]
+        self, sequence: Tuple[str, ...], logs: List[LogEntry]
     ) -> int:
         """Calculate days this pattern has appeared."""
         dates_with_pattern = set()
@@ -572,7 +519,7 @@ class EnhancedPatternDetector:
                 if session_logs:
                     try:
                         ts = session_logs[0].timestamp
-                        date = datetime.fromisoformat(ts.replace('Z', '+00:00')).date()
+                        date = datetime.fromisoformat(ts.replace("Z", "+00:00")).date()
                         dates_with_pattern.add(date)
                     except:
                         pass
@@ -585,10 +532,7 @@ class EnhancedPatternDetector:
         return (max_date - min_date).days + 1
 
     def _find_exemplars(
-        self,
-        sequence: Tuple[str, ...],
-        logs: List[LogEntry],
-        limit: int
+        self, sequence: Tuple[str, ...], logs: List[LogEntry], limit: int
     ) -> List[LogEntry]:
         """Find example log entries demonstrating this pattern."""
         exemplars = []
@@ -609,9 +553,9 @@ class EnhancedPatternDetector:
         """Generate human-readable pattern description."""
         steps = []
         for event_key in sequence:
-            if ':' in event_key:
-                tool, tags = event_key.split(':', 1)
-                tag_list = tags.split(',')[:2]
+            if ":" in event_key:
+                tool, tags = event_key.split(":", 1)
+                tag_list = tags.split(",")[:2]
                 steps.append(f"{tool}({','.join(tag_list)})")
             else:
                 steps.append(event_key)
@@ -623,17 +567,15 @@ class EnhancedPatternDetector:
         all_tags = set()
 
         for event_key in sequence:
-            parts = event_key.split(':')
+            parts = event_key.split(":")
             all_tags.add(parts[0])  # Tool name
             if len(parts) > 1:
-                all_tags.update(parts[1].split(','))
+                all_tags.update(parts[1].split(","))
 
         return list(all_tags)
 
     def _get_date_range(
-        self,
-        sequence: Tuple[str, ...],
-        logs: List[LogEntry]
+        self, sequence: Tuple[str, ...], logs: List[LogEntry]
     ) -> Tuple[str, str]:
         """Get first and last seen timestamps for pattern."""
         timestamps = []
@@ -653,9 +595,7 @@ class EnhancedPatternDetector:
         return timestamps[0], timestamps[-1]
 
     def cluster_patterns_semantically(
-        self,
-        patterns: List[PatternDefinition],
-        use_llm: bool = True
+        self, patterns: List[PatternDefinition], use_llm: bool = True
     ) -> Dict[str, List[PatternDefinition]]:
         """
         Cluster patterns by semantic similarity.
@@ -683,18 +623,14 @@ class EnhancedPatternDetector:
         return self._cluster_by_tags(patterns)
 
     def _cluster_with_llm(
-        self,
-        patterns: List[PatternDefinition]
+        self, patterns: List[PatternDefinition]
     ) -> Optional[Dict[str, List[PatternDefinition]]]:
         """Cluster patterns using local LLM."""
         try:
             from esass.integrations.local_llm import get_local_llm_client
 
             # Prepare pattern data for LLM
-            pattern_data = [
-                (p.description, p.sequence, p.tags)
-                for p in patterns
-            ]
+            pattern_data = [(p.description, p.sequence, p.tags) for p in patterns]
 
             # Run async clustering
             try:
@@ -735,8 +671,7 @@ class EnhancedPatternDetector:
             return None
 
     def _cluster_by_tags(
-        self,
-        patterns: List[PatternDefinition]
+        self, patterns: List[PatternDefinition]
     ) -> Dict[str, List[PatternDefinition]]:
         """Fallback clustering by shared tags."""
         clusters: Dict[str, List[PatternDefinition]] = defaultdict(list)
@@ -769,9 +704,7 @@ class EnhancedPatternDetector:
             return "general"
 
     def deduplicate_patterns(
-        self,
-        patterns: List[PatternDefinition],
-        similarity_threshold: float = 0.8
+        self, patterns: List[PatternDefinition], similarity_threshold: float = 0.8
     ) -> List[PatternDefinition]:
         """
         Remove duplicate/very similar patterns.
@@ -808,8 +741,7 @@ class EnhancedPatternDetector:
         return deduplicated
 
     def _detect_workflow_patterns(
-        self,
-        base_patterns: List[PatternDefinition]
+        self, base_patterns: List[PatternDefinition]
     ) -> List[PatternDefinition]:
         """
         Detect higher-level workflow patterns from base patterns.
@@ -823,35 +755,36 @@ class EnhancedPatternDetector:
 
         # Define known workflow signatures
         WORKFLOWS = {
-            'git_workflow': {
-                'indicators': ['git_status', 'git_add', 'git_commit'],
-                'min_matches': 2
+            "git_workflow": {
+                "indicators": ["git_status", "git_add", "git_commit"],
+                "min_matches": 2,
             },
-            'file_modification': {
-                'indicators': ['Read', 'Edit', 'file_edit', 'Write'],
-                'min_matches': 2
+            "file_modification": {
+                "indicators": ["Read", "Edit", "file_edit", "Write"],
+                "min_matches": 2,
             },
-            'code_exploration': {
-                'indicators': ['Grep', 'Glob', 'Read', 'content_search', 'file_search'],
-                'min_matches': 2
+            "code_exploration": {
+                "indicators": ["Grep", "Glob", "Read", "content_search", "file_search"],
+                "min_matches": 2,
             },
-            'test_driven': {
-                'indicators': ['test_run', 'Edit', 'Bash'],
-                'min_matches': 2
-            }
+            "test_driven": {
+                "indicators": ["test_run", "Edit", "Bash"],
+                "min_matches": 2,
+            },
         }
 
         for pattern in base_patterns:
             pattern_tags = set(pattern.tags)
-            seq_str = ' '.join(pattern.sequence)
+            seq_str = " ".join(pattern.sequence)
 
             for workflow_name, config in WORKFLOWS.items():
                 matches = sum(
-                    1 for ind in config['indicators']
+                    1
+                    for ind in config["indicators"]
                     if ind in pattern_tags or ind in seq_str
                 )
 
-                if matches >= config['min_matches']:
+                if matches >= config["min_matches"]:
                     # Tag existing pattern with workflow
                     if workflow_name not in pattern.tags:
                         pattern.tags.append(workflow_name)
@@ -860,8 +793,9 @@ class EnhancedPatternDetector:
 
 
 # Convenience function for CLI integration
-def analyze_with_enhanced_detection(logs: List[LogEntry],
-                                     granularity: str = 'medium') -> List[PatternDefinition]:
+def analyze_with_enhanced_detection(
+    logs: List[LogEntry], granularity: str = "medium"
+) -> List[PatternDefinition]:
     """
     Analyze logs with enhanced pattern detection.
 
@@ -876,6 +810,6 @@ def analyze_with_enhanced_detection(logs: List[LogEntry],
         min_support=3,
         min_confidence=0.6,
         min_stability_days=1,  # Very relaxed for initial detection
-        granularity=granularity
+        granularity=granularity,
     )
     return detector.detect_patterns(logs)

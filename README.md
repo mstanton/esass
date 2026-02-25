@@ -76,6 +76,30 @@ Claude Code session
 4. **Execute** -- Skills route through a 3-tier LLM system: local Ollama (~$0), HuggingFace ($0.001/1K tok), or Claude ($0.015/1K tok).
 5. **Evolve** -- Adaptive routing tracks success rates per skill and promotes/demotes across tiers automatically.
 
+## Theory of Operation
+
+ESASS functions as a **closed-loop feedback system** for AI agency.
+
+### 1. Semantic Signal Extraction
+
+Unlike raw loggers, ESASS performs **real-time semantic enrichment**. As tools are used, the engine extracts high-level intents (e.g., `git_workflow`, `file_refactor`) using configurable mappings in `config.yaml`. This turns "noisy" tool calls into a clean signal for pattern mining.
+
+### 2. Temporal Pattern Archaeolgy
+
+The analysis engine uses a modified **PrefixSpan algorithm** to discover recurring temporal sequences. It looks beyond immediate repetitions, finding patterns that span long-running sessions. Each pattern is assigned a *Stability Score* based on its frequency and longevity.
+
+### 3. Dynamic Skill Synthesis
+
+When a pattern stabilizes, ESASS synthesizes a **Skill Manifest**. It uses a local LLM to dynamically infer:
+
+- **Capabilities**: What logical domain the skill belongs to (e.g., `deployment`, `debugging`).
+- **Semantic Naming**: Human-readable names like `python_unittest_workflow`.
+- **Implementation Summary**: A step-by-step reconstruction of the observed workflow.
+
+### 4. Adaptive Tiered Execution
+
+Generated skills are executed via the **Tier Router**. By default, skills start on the **Local Tier** (Ollama). If execution fails or reliability drops, the **Adaptive Router** automatically promotes the skill to a higher tier (HuggingFace or Claude) to ensure project stability while maintaining an aggressive "local-first" cost strategy.
+
 ## CLI Commands
 
 | Command | Description |

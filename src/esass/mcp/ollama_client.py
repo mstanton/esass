@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OllamaResponse:
     """Response from Ollama API."""
+
     content: str
     model: str
     done: bool
@@ -75,6 +76,7 @@ class OllamaClient:
         self._last_health_check: float = 0
         self._health_check_interval = 30.0  # seconds
         self._is_healthy: bool | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         # Circuit breaker for failure protection
         self._circuit = CircuitBreaker(
@@ -83,7 +85,7 @@ class OllamaClient:
                 failure_threshold=3,
                 success_threshold=2,
                 timeout_seconds=30.0,
-            )
+            ),
         )
 
         # Response cache
@@ -105,7 +107,8 @@ class OllamaClient:
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client with connection pooling."""
-        if self._client is None:
+        current_loop = asyncio.get_running_loop()
+        if self._client is None or self._client.is_closed or self._loop != current_loop:
             limits = httpx.Limits(
                 max_connections=self.max_connections,
                 max_keepalive_connections=5,
@@ -116,6 +119,7 @@ class OllamaClient:
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=limits,
             )
+            self._loop = current_loop
         return self._client
 
     async def close(self) -> None:
@@ -407,7 +411,7 @@ Determine the appropriate actions and respond with a JSON execution plan."""
         prompt = f"""Generate a concise, semantic skill name for this pattern:
 
 Pattern: {pattern_sequence}
-Tags: {', '.join(tags) if tags else 'none'}
+Tags: {", ".join(tags) if tags else "none"}
 
 Requirements:
 - Use snake_case

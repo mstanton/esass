@@ -37,6 +37,17 @@ DEFAULT_CONFIG = {
         "min_stability_days": 7,
     },
     "probes": {"enabled": True, "buffer_size": 100, "flush_interval": 5.0},
+    "semantic_extraction": {
+        "noise_tags": [
+            "boundary_action",
+            "hook_error",
+            "hook_success",
+            "unknown",
+            "none",
+            "null",
+            "",
+        ]
+    },
 }
 
 ESASS_COMMAND_MD = """\
@@ -76,6 +87,39 @@ def _detect_environment(project_dir: Path) -> dict:
         "has_mcp_json": (project_dir / ".mcp.json").is_file(),
     }
     return env
+
+
+def _run_preflight_checks(enable_mcp: bool = False) -> bool:
+    """Check for basic requirements before init."""
+    click.echo("  Running pre-flight checks...")
+    all_ok = True
+
+    # Python Version
+    py_ver = sys.version_info
+    if py_ver.major < 3 or (py_ver.major == 3 and py_ver.minor < 10):
+        _echo_step(
+            f"Python 3.10+ required (found {py_ver.major}.{py_ver.minor})", ok=False
+        )
+        all_ok = False
+    else:
+        _echo_step("Python version OK")
+
+    # Ollama (if MCP enabled)
+    if enable_mcp:
+        try:
+            import httpx
+
+            # Quick check if Ollama is running
+            response = httpx.get("http://localhost:11434/api/tags", timeout=1.0)
+            if response.status_code == 200:
+                _echo_step("Ollama service detected")
+            else:
+                _echo_step("Ollama service not responding", ok=False)
+                # Don't fail init, just warn
+        except Exception:
+            _echo_step("Ollama service not detected (required for MCP)", ok=False)
+
+    return all_ok
 
 
 def _create_config(esass_dir: Path, project_dir: Path):
@@ -360,8 +404,7 @@ def _quick_init(project_dir: Path, ollama_model: str):
     _configure_path()
 
     click.echo(
-        click.style("  ESASS ready!", fg="green", bold=True)
-        + f" ({project_dir.name})"
+        click.style("  ESASS ready!", fg="green", bold=True) + f" ({project_dir.name})"
     )
 
 
@@ -373,12 +416,12 @@ def _quick_init(project_dir: Path, ollama_model: str):
     help="Install hooks and data in ~/",
 )
 @click.option("--enable-mcp", is_flag=True, help="Configure MCP server")
-@click.option(
-    "--ollama-model", default="gemma3:4b", help="Ollama model for MCP server"
-)
+@click.option("--ollama-model", default="gemma3:4b", help="Ollama model for MCP server")
 @click.option("--yes", "-y", is_flag=True, help="Non-interactive mode")
 @click.option(
-    "--quick", "-q", is_flag=True,
+    "--quick",
+    "-q",
+    is_flag=True,
     help="Fast bootstrap: .mcp.json + permissions + data dirs",
 )
 def init(global_install, enable_mcp, ollama_model, yes, quick):
@@ -392,6 +435,14 @@ def init(global_install, enable_mcp, ollama_model, yes, quick):
     click.echo()
     click.echo(click.style("  ESASS Init", bold=True))
     click.echo()
+
+    # 0. Pre-flight checks
+    if not _run_preflight_checks(enable_mcp):
+        if not yes and not click.confirm(
+            "  Requirements not fully met. Proceed anyway?", default=False
+        ):
+            click.echo("  Aborted.")
+            return
 
     # Detect environment
     click.echo("  Detecting environment...")
@@ -443,6 +494,14 @@ def init(global_install, enable_mcp, ollama_model, yes, quick):
     # 7. Optionally configure MCP
     if enable_mcp:
         _configure_mcp(project_dir, ollama_model)
+
+    click.echo()
+    click.echo(click.style("  Setup Summary:", bold=True))
+    _echo_step(f"Project: {project_dir.name}")
+    _echo_step("Config: .esass/config.yaml")
+    _echo_step("Hooks: ~/.claude/hooks.json")
+    if enable_mcp:
+        _echo_step(f"MCP: .mcp.json ({ollama_model})")
 
     click.echo()
     click.echo(

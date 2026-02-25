@@ -16,9 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-
-
-# --- Subsystem configs (from esass_prototype/config.py) ---
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -77,6 +75,67 @@ class ProbeSystemConfig:
     sample_rate: float = 1.0
 
 
+@dataclass
+class SemanticExtractionConfig:
+    tool_categories: Dict[str, str] = field(
+        default_factory=lambda: {
+            "Read": "file_read",
+            "Write": "file_write",
+            "Edit": "file_edit",
+            "Glob": "file_search",
+            "Grep": "content_search",
+            "Bash": "command",
+            "Task": "delegation",
+            "WebFetch": "web",
+            "WebSearch": "web",
+            "AskUserQuestion": "interaction",
+        }
+    )
+    file_type_semantics: Dict[str, str] = field(
+        default_factory=lambda: {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".json": "config",
+            ".yaml": "config",
+            ".yml": "config",
+            ".md": "docs",
+            ".txt": "text",
+            ".sh": "script",
+            ".ps1": "script",
+        }
+    )
+    command_patterns: Dict[str, str] = field(
+        default_factory=lambda: {
+            r"git\s+status": "git_status",
+            r"git\s+add": "git_add",
+            r"git\s+commit": "git_commit",
+            r"git\s+push": "git_push",
+            r"git\s+pull": "git_pull",
+            r"git\s+diff": "git_diff",
+            r"git\s+log": "git_log",
+            r"pytest|python\s+-m\s+pytest": "test_run",
+            r"npm\s+test|yarn\s+test": "test_run",
+            r"pip\s+install": "dependency",
+            r"npm\s+install|yarn\s+add": "dependency",
+            r"python|node|ruby": "execution",
+            r"docker": "container",
+            r"kubectl": "kubernetes",
+        }
+    )
+    noise_tags: List[str] = field(
+        default_factory=lambda: [
+            "boundary_action",
+            "hook_error",
+            "hook_success",
+            "unknown",
+            "none",
+            "null",
+            "",
+        ]
+    )
+
+
 # --- MCP / Local LLM config (from local-llm-mcp/config.py) ---
 
 
@@ -111,6 +170,9 @@ class ESASSConfig:
     export: ExportConfig = field(default_factory=ExportConfig)
     probes: ProbeSystemConfig = field(default_factory=ProbeSystemConfig)
     local_llm: LocalLLMConfig = field(default_factory=LocalLLMConfig)
+    semantic_extraction: SemanticExtractionConfig = field(
+        default_factory=SemanticExtractionConfig
+    )
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -123,12 +185,13 @@ class ESASSConfig:
             pattern_detection=PatternDetectionConfig(
                 **data.get("pattern_detection", {})
             ),
-            skill_generation=SkillGenerationConfig(
-                **data.get("skill_generation", {})
-            ),
+            skill_generation=SkillGenerationConfig(**data.get("skill_generation", {})),
             export=ExportConfig(**data.get("export", {})),
             probes=ProbeSystemConfig(**data.get("probes", {})),
             local_llm=LocalLLMConfig(**data.get("local_llm", {})),
+            semantic_extraction=SemanticExtractionConfig(
+                **data.get("semantic_extraction", {})
+            ),
         )
 
 

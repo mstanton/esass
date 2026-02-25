@@ -54,14 +54,13 @@ class SkillTemplateGenerator:
             capabilities=capabilities,
             implementation_summary=implementation_summary,
             validation_status="pending",
-            tags=pattern.tags
+            tags=pattern.tags,
         )
 
         return skill
 
     def generate_from_patterns(
-        self,
-        patterns: List[PatternDefinition]
+        self, patterns: List[PatternDefinition]
     ) -> List[SkillManifest]:
         """
         Generate multiple skills from patterns.
@@ -91,15 +90,15 @@ class SkillTemplateGenerator:
             first_event = pattern.sequence[0]
 
             # Handle both "event_type:tags" and "event_type" formats
-            if ':' in first_event:
-                event_type, tags = first_event.split(':', 1)
+            if ":" in first_event:
+                event_type, tags = first_event.split(":", 1)
             else:
                 event_type = first_event
                 tags = "none"
 
             # Create semantic trigger from tags
             if tags != "none":
-                tag_list = tags.split(',')
+                tag_list = tags.split(",")
                 triggers.append(f"intent_match:{','.join(tag_list[:3])}")
 
             # Create event type trigger
@@ -121,13 +120,18 @@ class SkillTemplateGenerator:
         Returns:
             List of capability strings
         """
+        # Try local LLM first
+        llm_capabilities = self._infer_capabilities_with_llm(pattern)
+        if llm_capabilities:
+            return llm_capabilities
+
         capabilities = []
 
         # Analyze sequence for capability indicators
         for event in pattern.sequence:
             # Handle both "event_type:tags" and "event_type" formats
-            if ':' in event:
-                event_type, tags = event.split(':', 1)
+            if ":" in event:
+                event_type, tags = event.split(":", 1)
             else:
                 event_type = event
                 tags = ""
@@ -167,6 +171,36 @@ class SkillTemplateGenerator:
         # Deduplicate and return
         return list(set(capabilities))
 
+    def _infer_capabilities_with_llm(self, pattern: PatternDefinition) -> List[str]:
+        """
+        Infer capabilities using local LLM.
+
+        Args:
+            pattern: PatternDefinition
+
+        Returns:
+            List of capability strings or empty list if unavailable
+        """
+        try:
+            from esass.integrations.local_llm import infer_capabilities_sync
+
+            capabilities = infer_capabilities_sync(
+                pattern_description=pattern.description,
+                sequence=pattern.sequence,
+                tags=pattern.tags,
+            )
+
+            if capabilities:
+                logger.debug(f"LLM inferred capabilities: {capabilities}")
+                return capabilities
+
+        except ImportError:
+            logger.debug("Local LLM integration not available for capability inference")
+        except Exception as e:
+            logger.debug(f"LLM capability inference failed: {e}")
+
+        return []
+
     def _generate_name(self, pattern: PatternDefinition) -> str:
         """
         Generate skill name from pattern.
@@ -183,10 +217,10 @@ class SkillTemplateGenerator:
         # Extract tags for fallback and context
         all_tags = []
         for event in pattern.sequence:
-            if ':' in event:
-                _, tags = event.split(':', 1)
+            if ":" in event:
+                _, tags = event.split(":", 1)
                 if tags != "none":
-                    all_tags.extend(tags.split(','))
+                    all_tags.extend(tags.split(","))
 
         # Find most common tags
         tag_counts = Counter(all_tags)
@@ -206,9 +240,7 @@ class SkillTemplateGenerator:
             return f"pattern_{pattern.pattern_id[:8]}_skill"
 
     def _generate_name_with_llm(
-        self,
-        pattern: PatternDefinition,
-        tags: List[str]
+        self, pattern: PatternDefinition, tags: List[str]
     ) -> Optional[str]:
         """
         Generate skill name using local LLM.
@@ -243,10 +275,7 @@ class SkillTemplateGenerator:
 
         return None
 
-    def _generate_implementation_summary(
-        self,
-        pattern: PatternDefinition
-    ) -> str:
+    def _generate_implementation_summary(self, pattern: PatternDefinition) -> str:
         """
         Generate implementation summary from pattern.
 
@@ -261,14 +290,14 @@ class SkillTemplateGenerator:
 
         for i, event in enumerate(pattern.sequence, 1):
             # Handle both "event_type:tags" and "event_type" formats
-            if ':' in event:
-                event_type, tags = event.split(':', 1)
+            if ":" in event:
+                event_type, tags = event.split(":", 1)
             else:
                 event_type = event
                 tags = "none"
 
             # Create human-readable step
-            tag_list = tags.split(',') if tags != "none" else []
+            tag_list = tags.split(",") if tags != "none" else []
 
             if event_type == "reasoning":
                 step = f"Step {i}: Analyze and reason about {', '.join(tag_list[:2])}"
