@@ -101,57 +101,6 @@ python -m esass.hooks.dashboard
 # Or auto-launched via SessionStart hook
 ```
 
-### What it shows
-
-```
-═══════════════════════════════════════════════════════════════
-  ESASS UNIFIED DASHBOARD       [✓ SYNCHRONIZED]    10:30:15
-═══════════════════════════════════════════════════════════════
-
-  Protection Field                    Live Event Stream
-
-  [gradient visualization]             10:30:14 [R] Read   src/main.py
-                                       10:30:13 [E] Edit   src/main.py
-                                       10:30:12 [M] MCP    fix_import ✓ local $0.01
-
-  Field Status        Tool Usage           System Health
-
-  Health:  STABLE     [R] Read    ███      Alerts:  ✓ NONE
-  Trust:   ██████ 65% [E] Edit    ██       Errors:  ▁▁▂▃▁▁▁
-  Events:  142        [$] Bash    █        Success: ▇▇▇▆▇▇▇
-────────────────────────────────────────────────────────────────
-  MCP Server           Tier Distribution       Cost Tracking
-
-  local         ✓      local     ████████ 81%  Executions:  47
-  huggingface   ✓      huggingface ██     17%  Cost:     $0.0023
-  claude        ✓      claude      █       2%  Savings:  $0.69 (99%)
-
-  ollama    ○ CLOSED   Cache: 12/50 (23%)      Rate: ████████ 8/10
-  huggingface ○ CLOSED
-────────────────────────────────────────────────────────────────
-  Pattern Formation & Skill Crystallization
-
-  ● ●●●●○ Read → Edit → Bash           (12x)
-  ● ●●●○○ Grep → Read → Edit           (8x)
-────────────────────────────────────────────────────────────────
-  Unified Event Stream (tool calls + MCP executions)
-
-  10:30:14   [R]Read  file_op         src/main.py
-  10:30:13   [M]MCP   fix_import  ✓   local  $0.0149
-  10:30:12   [$]Bash  git             git status
-
-  [H]istory:[ON] [M]CP:[ON] [S]napshot [C]lear │ Ctrl+C to exit
-```
-
-### Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| `H` | Toggle historical alerts display |
-| `M` | Toggle MCP server panel |
-| `S` | Save dashboard snapshot to markdown |
-| `C` | Clear event buffer |
-
 ### Dashboard data flow
 
 The dashboard reads from two file-based streams (no sockets or IPC):
@@ -277,6 +226,7 @@ The MCP server provides cost-optimized skill execution through a 3-tier system:
 | Premium | Claude | ~$0.015 | Security, architecture decisions |
 
 Resilience features:
+
 - **Circuit breaker**: Opens after 3 consecutive Ollama failures (30s recovery)
 - **Retry with backoff**: 3 attempts with exponential delay
 - **Response cache**: LRU cache with 5-minute TTL
