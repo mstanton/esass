@@ -9,7 +9,7 @@ Enhanced with:
 - Model warmup on startup
 
 Tier hierarchy:
-1. Local (Ollama/gemma3:4b) - Primary, free
+1. Local (Ollama/gemma4:26b) - Primary, free
 2. HuggingFace Inference API - Fallback, cheap
 3. Claude - Passthrough for complex tasks
 """
@@ -54,9 +54,10 @@ def _setup_logging() -> logging.Logger:
     root_logger.addHandler(stderr_handler)
 
     # File handler - write to a known location for tailing
-    log_dir = Path(
-        os.environ.get("ESASS_DATA_DIR", str(Path.home() / ".esass" / "data"))
-    ) / "logs"
+    log_dir = (
+        Path(os.environ.get("ESASS_DATA_DIR", str(Path.home() / ".esass" / "data")))
+        / "logs"
+    )
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "mcp_server.log"
 
@@ -72,7 +73,9 @@ def _setup_logging() -> logging.Logger:
     mcp_parent.setLevel(level)
     mcp_parent.addHandler(file_handler)
 
-    root_logger.info(f"Logging initialized: level={logging.getLevelName(level)}, file={log_file}")
+    root_logger.info(
+        f"Logging initialized: level={logging.getLevelName(level)}, file={log_file}"
+    )
     return root_logger
 
 
@@ -219,13 +222,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     # Rate limiting (skip for status queries)
     if name not in ("check_availability", "get_routing_stats", "get_adaptive_status"):
         if not _rate_limiter.acquire():
-            return [TextContent(
-                type="text",
-                text=json.dumps({
-                    "error": "Rate limit exceeded. Please wait before making more requests.",
-                    "rate_limit": _rate_limiter.get_status(),
-                })
-            )]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "error": "Rate limit exceeded. Please wait before making more requests.",
+                            "rate_limit": _rate_limiter.get_status(),
+                        }
+                    ),
+                )
+            ]
 
     try:
         if name == "execute_skill":
@@ -274,10 +281,17 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
     except Exception as e:
         logger.exception(f"Error in tool {name}")
-        return [TextContent(type="text", text=json.dumps({
-            "error": str(e),
-            "error_type": type(e).__name__,
-        }))]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                ),
+            )
+        ]
 
 
 async def _execute_skill(
@@ -328,7 +342,8 @@ async def _execute_skill(
     # Execute with cost tracking and adaptive learning
     start_time = time.time()
     result = await router.execute_with_fallback(
-        routing, executor,
+        routing,
+        executor,
         skill_name=skill_name,
         capabilities=capabilities,
     )
@@ -338,6 +353,7 @@ async def _execute_skill(
     try:
         tokens = result.tokens_used or 0
         from esass.mcp.cost_tracker import COST_PER_1K_TOKENS
+
         cost_actual = (tokens / 1000) * COST_PER_1K_TOKENS.get(result.tier_used, 0.015)
         cost_if_claude = (tokens / 1000) * COST_PER_1K_TOKENS[Tier.CLAUDE]
         savings = cost_if_claude - cost_actual
@@ -585,6 +601,7 @@ async def _status_update_loop() -> None:
             tier_breakdown = session_summary.get("tier_breakdown", {})
 
             from esass.mcp.adaptive_router import get_adaptive_router
+
             adaptive_router = get_adaptive_router()
             overrides = adaptive_router.get_all_overrides()
 
@@ -618,7 +635,9 @@ async def warmup_models() -> None:
 async def _async_main():
     """Run the MCP server (async)."""
     logger.info("Starting local-llm-mcp server...")
-    logger.info(f"Config: ollama={get_config().ollama_endpoint}, model={get_config().ollama_model}")
+    logger.info(
+        f"Config: ollama={get_config().ollama_endpoint}, model={get_config().ollama_model}"
+    )
 
     # Check initial availability
     router = await get_router()

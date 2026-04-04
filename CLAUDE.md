@@ -57,6 +57,7 @@ src/esass/
 ### Hooks (no hardcoded paths)
 
 All hooks use `python -m` for portability:
+
 ```json
 {
   "PostToolUse": [{"command": "python -m esass.hooks.post_tool_use", "timeout": 5000}],
@@ -67,6 +68,7 @@ All hooks use `python -m` for portability:
 ### Config Chain
 
 `load_config()` in `src/esass/config.py` resolves config from:
+
 1. `$ESASS_CONFIG` env var
 2. `.esass/config.yaml` (project-local)
 3. `~/.esass/config.yaml` (global)
@@ -77,6 +79,7 @@ Data directory defaults to `.esass/data/` in the project root.
 ### Import Conventions
 
 All imports use the `esass.*` namespace:
+
 ```python
 from esass.config import load_config, get_data_dir
 from esass.probes.base import FilteringProbe, ProbeContext
@@ -97,6 +100,7 @@ MCP config is at `esass.mcp.mcp_config` (renamed from `config.py` to avoid clash
 ### Probe System
 
 10 probes observe every tool call and produce structured log entries:
+
 - ToolCallProbe, ToolSequenceDetector
 - ReasoningProbe, CausalReasoningProbe
 - DecisionProbe, TradeoffAnalysisProbe
@@ -110,6 +114,7 @@ All probes extend `FilteringProbe` from `src/esass/probes/base.py`. Probes must 
 ## Common Tasks
 
 ### Add ESASS to a new project
+
 ```bash
 cd my-project
 esass init                    # basic setup
@@ -117,19 +122,22 @@ esass init --enable-mcp       # with local LLM support
 ```
 
 ### Run the dashboard manually
+
 ```bash
 python -m esass.hooks.dashboard
 ```
 
 ### Simulate events for dashboard testing
+
 ```bash
 python -m esass.hooks.simulate_events --speed 2 --loops 5
 ```
 
 ### Start Ollama for local LLM
+
 ```bash
 ollama serve
-ollama pull gemma3:4b
+ollama pull gemma4:26b
 ```
 
 ## Entry Points

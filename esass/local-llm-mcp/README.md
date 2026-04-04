@@ -34,6 +34,7 @@ This system implements a **hardened 3-tier hybrid architecture** with enterprise
 ## Features
 
 ### Core Features
+
 - **3-Tier Routing**: Automatic routing based on task complexity
 - **Cost Tracking**: Per-execution logging with savings analytics
 - **Adaptive Learning**: Learns from failures to improve routing
@@ -42,6 +43,7 @@ This system implements a **hardened 3-tier hybrid architecture** with enterprise
 - **Skill Naming**: Generate meaningful names from patterns
 
 ### Hardening Features (v2.0)
+
 - **Circuit Breaker**: Prevents cascading failures when a tier is unhealthy
 - **Retry Logic**: Exponential backoff with jitter for transient failures
 - **Rate Limiting**: Token bucket limiter (30 req/min, burst of 10)
@@ -69,9 +71,8 @@ curl -fsSL https://ollama.com/install.sh | sh
 ### 2. Pull the Model
 
 ```bash
-ollama pull gemma3:4b
 # Or for better quality:
-ollama pull gemma3:12b
+ollama pull gemma4:26b
 ```
 
 ### 3. Start Ollama
@@ -100,7 +101,7 @@ python server.py
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_ENDPOINT` | `http://localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `gemma3:4b` | Model to use |
+| `OLLAMA_MODEL` | `gemma4:26b` | Model to use |
 | `OLLAMA_TIMEOUT` | `60` | Request timeout (seconds) |
 | `HF_TOKEN` | - | HuggingFace API token |
 | `HF_MODEL` | `mistralai/Mistral-7B-Instruct-v0.3` | HF model |
@@ -242,7 +243,7 @@ Check tier availability with circuit breaker and cache status.
   },
   "config": {
     "ollama_endpoint": "http://localhost:11434",
-    "ollama_model": "gemma3:4b"
+    "ollama_model": "gemma4:26b"
   }
 }
 ```
@@ -301,6 +302,7 @@ Protects against cascading failures when a tier becomes unhealthy.
 | HuggingFace | 5 failures | 60 seconds | 3 calls |
 
 **States:**
+
 - `CLOSED`: Normal operation, requests pass through
 - `OPEN`: Tier unhealthy, requests fail fast
 - `HALF_OPEN`: Testing recovery, limited requests allowed
@@ -351,6 +353,7 @@ All requests are validated before processing.
 ### Model Warmup
 
 On server startup:
+
 1. Check Ollama availability
 2. Send minimal warmup request to load model
 3. Set 5-minute keep-alive to prevent model unloading
@@ -468,7 +471,7 @@ Add to `.mcp.json` in your project root:
       "args": ["C:/workspace/ESASS/esass/local-llm-mcp/server.py"],
       "env": {
         "OLLAMA_ENDPOINT": "http://localhost:11434",
-        "OLLAMA_MODEL": "gemma3:4b"
+        "OLLAMA_MODEL": "gemma4:26b"
       }
     }
   }
@@ -539,7 +542,7 @@ ollama serve
 ollama list
 
 # Pull required model
-ollama pull gemma3:4b
+ollama pull gemma4:26b
 ```
 
 ### Circuit Breaker Open
@@ -567,9 +570,9 @@ The system handles markdown-wrapped JSON responses automatically via `extract_js
 
 ### High Latency
 
-- gemma3:4b typically responds in 2-4 seconds
-- gemma3:12b typically responds in 5-10 seconds
-- For faster responses, consider `gemma3:1b` (less capable)
+- gemma4:26b typically responds in 2-4 seconds
+- gemma4:26b typically responds in 5-10 seconds
+- For faster responses, consider `gemma4:26b` (less capable)
 - Ensure GPU acceleration is enabled in Ollama
 - First request may be slower (model loading)
 
@@ -581,8 +584,8 @@ In-memory execution logs are bounded to 1000 entries by default. Older logs are 
 
 | Model | Size | Speed | Capability | Use Case |
 |-------|------|-------|------------|----------|
-| gemma3:4b | 3.3GB | 2-4s | Good | Default choice |
-| gemma3:12b | 8.1GB | 5-10s | Better | Complex analysis |
+| gemma4:26b | 3.3GB | 2-4s | Good | Default choice |
+| gemma4:26b | 8.1GB | 5-10s | Better | Complex analysis |
 | functiongemma | 300MB | <1s | Limited | Simple tasks only |
 
 ## Changelog

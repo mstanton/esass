@@ -28,7 +28,7 @@ Executes ESASS skills using a 3-tier local-first approach for maximum cost savin
 
 ## Tier Hierarchy
 
-1. **Tier 1: Local (Ollama/Gemma3:12b)** - Primary, ~$0 cost
+1. **Tier 1: Local (Ollama/Gemma4:26b)** - Primary, ~$0 cost
    - Fast inference on local GPU
    - Suitable for: skill execution, code generation, file operations
 
@@ -47,7 +47,7 @@ Executes ESASS skills using a 3-tier local-first approach for maximum cost savin
 winget install ollama.ollama
 
 # Pull FunctionGemma model
-ollama pull gemma3:12b
+ollama pull gemma4:26b
 
 # Start Ollama server
 ollama serve
@@ -61,7 +61,7 @@ export HF_TOKEN="your_huggingface_token"
 
 # Optional configuration
 export OLLAMA_ENDPOINT="http://localhost:11434"
-export OLLAMA_MODEL="gemma3:12b"
+export OLLAMA_MODEL="gemma4:26b"
 export LOCAL_LLM_ENABLED="true"
 ```
 
