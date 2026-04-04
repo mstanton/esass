@@ -144,7 +144,7 @@ class LocalLLMConfig:
     enabled: bool = True
     debug: bool = False
     ollama_endpoint: str = "http://localhost:11434"
-    ollama_model: str = "gemma3:4b"
+    ollama_model: str = "gemma4:26b"
     ollama_timeout_seconds: int = 60
     hf_model: str = "mistralai/Mistral-7B-Instruct-v0.3"
     hf_token: str = ""
@@ -277,12 +277,12 @@ _GLOBAL_CONFIG_DEFAULTS = {
     },
     "local_llm": {
         "enabled": True,
-        "ollama_model": "gemma3:4b",
+        "ollama_model": "gemma4:26b",
         "hf_model": "mistralai/Mistral-7B-Instruct-v0.3",
         "hf_token": "",
     },
     "mcp_env": {
-        "OLLAMA_MODEL": "gemma3:4b",
+        "OLLAMA_MODEL": "gemma4:26b",
         "HF_TOKEN": "",
     },
 }
