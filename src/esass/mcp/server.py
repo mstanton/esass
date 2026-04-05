@@ -9,7 +9,7 @@ Enhanced with:
 - Model warmup on startup
 
 Tier hierarchy:
-1. Local (Ollama/gemma4:26b) - Primary, free
+1. Local (Ollama/gemma4:31b) - Primary, free
 2. HuggingFace Inference API - Fallback, cheap
 3. Claude - Passthrough for complex tasks
 """

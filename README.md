@@ -29,7 +29,7 @@ Restart Claude Code after init. The observer starts automatically.
 ```bash
 pip install -e ".[mcp]"      # adds MCP server dependencies
 ollama serve                  # start Ollama
-ollama pull gemma4:26b         # pull the default model
+ollama pull gemma4:31b         # pull the default model
 esass init --enable-mcp       # configure MCP server in .mcp.json
 ```
 
@@ -233,7 +233,7 @@ skill_generation:
 
 local_llm:
   enabled: false
-  ollama_model: "gemma4:26b"
+  ollama_model: "gemma4:31b"
   ollama_url: "http://localhost:11434"
 ```
 
@@ -245,7 +245,7 @@ The MCP server provides cost-optimized skill execution through a 3-tier system:
 
 | Tier | Provider | Cost/1K tokens | Use case |
 |------|----------|---------------|----------|
-| Local | Ollama (gemma4:26b) | ~$0.0001 | File ops, testing, git (70% of tasks) |
+| Local | Ollama (gemma4:31b) | ~$0.0001 | File ops, testing, git (70% of tasks) |
 | Cloud | HuggingFace | ~$0.001 | Complex analysis, fallback |
 | Premium | Claude | ~$0.015 | Security, architecture decisions |
 
@@ -311,7 +311,7 @@ ruff format --check src/
 python -m esass.hooks.simulate_events --speed 2 --loops 5
 
 # Start Ollama for local LLM development
-ollama serve && ollama pull gemma4:26b
+ollama serve && ollama pull gemma4:31b
 ```
 
 ## Optional Dependencies

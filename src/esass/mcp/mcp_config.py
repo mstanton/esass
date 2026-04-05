@@ -25,7 +25,7 @@ class LocalLLMConfig:
     # Ollama settings (Tier 1)
     ollama_endpoint: str = "http://localhost:11434"
     ollama_model: str = (
-        "gemma4:26b"  # More capable than functiongemma for general tasks
+        "gemma4:31b"  # More capable than functiongemma for general tasks
     )
     ollama_timeout_seconds: int = 60
 
@@ -82,7 +82,7 @@ class LocalLLMConfig:
             enabled=os.environ.get("LOCAL_LLM_ENABLED", "true").lower() == "true",
             debug=os.environ.get("LOCAL_LLM_DEBUG", "false").lower() == "true",
             ollama_endpoint=os.environ.get("OLLAMA_ENDPOINT", "http://localhost:11434"),
-            ollama_model=os.environ.get("OLLAMA_MODEL", "gemma4:26b"),
+            ollama_model=os.environ.get("OLLAMA_MODEL", "gemma4:31b"),
             ollama_timeout_seconds=int(os.environ.get("OLLAMA_TIMEOUT", "30")),
             hf_model=os.environ.get("HF_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
             hf_token=os.environ.get("HF_TOKEN", ""),

@@ -72,7 +72,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 ```bash
 # Or for better quality:
-ollama pull gemma4:26b
+ollama pull gemma4:31b
 ```
 
 ### 3. Start Ollama
@@ -101,7 +101,7 @@ python server.py
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_ENDPOINT` | `http://localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `gemma4:26b` | Model to use |
+| `OLLAMA_MODEL` | `gemma4:31b` | Model to use |
 | `OLLAMA_TIMEOUT` | `60` | Request timeout (seconds) |
 | `HF_TOKEN` | - | HuggingFace API token |
 | `HF_MODEL` | `mistralai/Mistral-7B-Instruct-v0.3` | HF model |
@@ -243,7 +243,7 @@ Check tier availability with circuit breaker and cache status.
   },
   "config": {
     "ollama_endpoint": "http://localhost:11434",
-    "ollama_model": "gemma4:26b"
+    "ollama_model": "gemma4:31b"
   }
 }
 ```
@@ -471,7 +471,7 @@ Add to `.mcp.json` in your project root:
       "args": ["C:/workspace/ESASS/esass/local-llm-mcp/server.py"],
       "env": {
         "OLLAMA_ENDPOINT": "http://localhost:11434",
-        "OLLAMA_MODEL": "gemma4:26b"
+        "OLLAMA_MODEL": "gemma4:31b"
       }
     }
   }
@@ -542,7 +542,7 @@ ollama serve
 ollama list
 
 # Pull required model
-ollama pull gemma4:26b
+ollama pull gemma4:31b
 ```
 
 ### Circuit Breaker Open
@@ -570,8 +570,8 @@ The system handles markdown-wrapped JSON responses automatically via `extract_js
 
 ### High Latency
 
-- gemma4:26b typically responds in 2-4 seconds
-- gemma4:26b typically responds in 5-10 seconds
+- gemma4:31b typically responds in 2-4 seconds
+- gemma4:31b typically responds in 5-10 seconds
 - For faster responses, consider `gemma4:26b` (less capable)
 - Ensure GPU acceleration is enabled in Ollama
 - First request may be slower (model loading)
@@ -585,7 +585,7 @@ In-memory execution logs are bounded to 1000 entries by default. Older logs are 
 | Model | Size | Speed | Capability | Use Case |
 |-------|------|-------|------------|----------|
 | gemma4:26b | 3.3GB | 2-4s | Good | Default choice |
-| gemma4:26b | 8.1GB | 5-10s | Better | Complex analysis |
+| gemma4:31b | 8.1GB | 5-10s | Better | Complex analysis |
 | functiongemma | 300MB | <1s | Limited | Simple tasks only |
 
 ## Changelog

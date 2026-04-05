@@ -308,7 +308,7 @@ def _configure_path_unix(scripts_dir: str):
     _echo_step(f"Added {scripts_dir} to {profile.name} (restart terminal to apply)")
 
 
-def _configure_mcp(project_dir: Path, ollama_model: str = "gemma4:26b"):
+def _configure_mcp(project_dir: Path, ollama_model: str = "gemma4:31b"):
     """Add esass-mcp-server to .mcp.json with env vars from global config."""
     from esass.config import load_global_mcp_env
 
@@ -417,7 +417,7 @@ def _quick_init(project_dir: Path, ollama_model: str):
 )
 @click.option("--enable-mcp", is_flag=True, help="Configure MCP server")
 @click.option(
-    "--ollama-model", default="gemma4:26b", help="Ollama model for MCP server"
+    "--ollama-model", default="gemma4:31b", help="Ollama model for MCP server"
 )
 @click.option("--yes", "-y", is_flag=True, help="Non-interactive mode")
 @click.option(

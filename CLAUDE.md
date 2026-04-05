@@ -137,7 +137,7 @@ python -m esass.hooks.simulate_events --speed 2 --loops 5
 
 ```bash
 ollama serve
-ollama pull gemma4:26b
+ollama pull gemma4:31b
 ```
 
 ## Entry Points
