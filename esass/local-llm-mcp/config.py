@@ -24,9 +24,7 @@ class LocalLLMConfig:
 
     # Ollama settings (Tier 1)
     ollama_endpoint: str = "http://localhost:11434"
-    ollama_model: str = (
-        "gemma4:31b"  # More capable than functiongemma for general tasks
-    )
+    ollama_model: str = "gemma4:31b"
     ollama_timeout_seconds: int = 60
 
     # HuggingFace settings (Tier 2)
@@ -50,9 +48,9 @@ class LocalLLMConfig:
             "test_writing": "local",
             "documentation": "local",
             # Tier 2: HuggingFace (fallback or medium complexity)
-            "complex_analysis": "huggingface",
-            "long_context": "huggingface",
-            "code_review": "huggingface",
+            "complex_analysis": "claude",
+            "long_context": "local",
+            "code_review": "local",
             # Tier 3: Claude (critical tasks - passthrough)
             "architecture_design": "claude",
             "security_review": "claude",

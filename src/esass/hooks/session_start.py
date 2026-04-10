@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # Lock file to prevent multiple dashboards
 LOCK_FILE = Path.home() / ".esass" / "dashboard.lock"
 
@@ -78,9 +80,9 @@ def main():
     try:
         create_lock()
         launch_dashboard()
-        print("\033[92m✓ ESASS Dashboard launched\033[0m")
+        print("\033[92m[OK] ESASS Dashboard launched\033[0m")
     except Exception as e:
-        print(f"\033[93m⚠ Could not launch dashboard: {e}\033[0m")
+        print(f"\033[93m[WARN] Could not launch dashboard: {e}\033[0m")
 
 
 if __name__ == "__main__":
