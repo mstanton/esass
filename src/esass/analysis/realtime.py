@@ -322,9 +322,9 @@ class RealtimeDisplay:
     def format_event(event: dict) -> str:
         """Format an event for display."""
         ts = event.get("timestamp", "")[:19]
-        data = event.get("data", {})
+        data = event.get("event_data", event.get("data", {}))
         tool_name = data.get("tool_name", "unknown")
-        icon = TOOL_ICONS.get(tool_name, "📌")
+        icon = TOOL_ICONS.get(tool_name, "[*]" if not UNICODE_SUPPORT else "\U0001f4cc")
         context = data.get("context", {})
         target = context.get("target", "")
 

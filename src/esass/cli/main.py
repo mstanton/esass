@@ -103,7 +103,7 @@ def observe_stop():
     default="medium",
     help="Pattern granularity: coarse (categories), medium (tool+context), fine (all tags)",
 )
-@click.option("--min-support", default=3, type=int, help="Minimum pattern occurrences")
+@click.option("--min-support", default=2, type=int, help="Minimum pattern occurrences")
 @click.option(
     "--min-stability", default=1, type=int, help="Minimum days pattern must appear"
 )
@@ -147,7 +147,7 @@ def analyze(days, enhanced, granularity, min_support, min_stability, within_sess
     if enhanced:
         detector = EnhancedPatternDetector(
             min_support=min_support,
-            min_confidence=0.6,
+            min_confidence=0.5,
             min_stability_days=min_stability,
             granularity=granularity,
             count_within_session=within_session,
@@ -156,8 +156,9 @@ def analyze(days, enhanced, granularity, min_support, min_stability, within_sess
 
         if logs and len(logs) > 0:
             sample_entry = logs[0]
-            sample_tags = SemanticTagExtractor.extract_tags(sample_entry)
-            sample_key = SemanticTagExtractor.create_event_key(
+            _extractor = SemanticTagExtractor()
+            sample_tags = _extractor.extract_tags(sample_entry)
+            sample_key = _extractor.create_event_key(
                 sample_entry, granularity
             )
             click.echo(f"\n   Sample event extraction:")
@@ -184,11 +185,13 @@ def analyze(days, enhanced, granularity, min_support, min_stability, within_sess
     click.echo(f"  Total patterns detected: {len(patterns)}")
     click.echo(f"  Semantically meaningful: {len(meaningful)}")
     click.echo(f"  Skill candidates: {len(candidates)}")
+    if not patterns and len(logs) > 0:
+        click.echo(f"\n  Hint: No patterns found with min-support={min_support}. Try --min-support 2 or collect more data.")
 
     if patterns:
         click.echo("\nTop 10 patterns by support:")
         for i, pattern in enumerate(patterns[:10], 1):
-            status = "[OK]" if pattern.skill_candidate else "•"
+            status = "[OK]" if pattern.skill_candidate else "[ ]"
             workflow_tags = [
                 t
                 for t in pattern.tags
@@ -206,13 +209,13 @@ def analyze(days, enhanced, granularity, min_support, min_stability, within_sess
 
 @esass.command("generate-skills")
 @click.option(
-    "--min-support", default=5, type=int, help="Minimum pattern occurrences"
+    "--min-support", default=2, type=int, help="Minimum pattern occurrences"
 )
 @click.option(
     "--min-stability", default=1, type=int, help="Minimum days pattern must appear"
 )
 @click.option(
-    "--min-confidence", default=0.6, type=float, help="Minimum confidence score"
+    "--min-confidence", default=0.5, type=float, help="Minimum confidence score"
 )
 @click.option(
     "--use-enhanced/--use-stored",
